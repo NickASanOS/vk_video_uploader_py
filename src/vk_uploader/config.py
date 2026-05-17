@@ -59,6 +59,8 @@ class ConfigFile:
                 "publish_delay_hours": config.defaults.publish_delay_hours,
                 "thumbnail": config.defaults.thumbnail,
                 "wallpost": config.defaults.wallpost,
+                "translation": config.defaults.translation,
+                "lang": config.defaults.lang,
             },
             "download": {
                 "output_dir": config.download.output_dir,
@@ -97,6 +99,8 @@ class ConfigFile:
             publish_delay_hours=int(defaults_data.get("publish_delay_hours", 24)),
             thumbnail=bool(defaults_data.get("thumbnail", True)),
             wallpost=bool(defaults_data.get("wallpost", False)),
+            translation=bool(defaults_data.get("translation", False)),
+            lang=str(defaults_data.get("lang", "ru")),
         )
         download = DownloadConfig(
             output_dir=str(download_data.get("output_dir", "~/Downloads")),

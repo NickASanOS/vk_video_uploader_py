@@ -153,3 +153,23 @@ def test_save_omits_empty_optional_fields(tmp_path: Path):
     raw = yaml.safe_load(cfg.path.read_text())
     assert "expires_at" not in raw["vk"]
     assert "user_id" not in raw["vk"]
+
+
+def test_load_translation_defaults(tmp_path: Path):
+    p = tmp_path / CONFIG_FILENAME
+    p.write_text(yaml.safe_dump({"defaults": {"translation": True, "lang": "de"}}))
+
+    cfg = ConfigFile(config_dir=str(tmp_path), filename=CONFIG_FILENAME)
+    config = cfg.load()
+    assert config.defaults.translation is True
+    assert config.defaults.lang == "de"
+
+
+def test_translation_defaults_when_missing(tmp_path: Path):
+    p = tmp_path / CONFIG_FILENAME
+    p.write_text(yaml.safe_dump({"defaults": {}}))
+
+    cfg = ConfigFile(config_dir=str(tmp_path), filename=CONFIG_FILENAME)
+    config = cfg.load()
+    assert config.defaults.translation is False
+    assert config.defaults.lang == "ru"

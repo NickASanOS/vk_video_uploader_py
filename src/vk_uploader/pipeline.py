@@ -65,6 +65,30 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
 
     ctx.stage = PipelineStage.DOWNLOAD_COMPLETED
 
+    # --- Translation (optional) ---
+    title = ctx.title_override or result.title
+    description = ctx.description_override or result.description
+
+    if config.defaults.translation:
+        lang = config.defaults.lang
+        console.print(f"\n  Translating to [bold]{lang}[/bold]...")
+
+        from vk_uploader.translate import translate_text
+
+        t_title = translate_text(title, lang)
+        if t_title != title:
+            console.print(f"  Title: [dim]{t_title}[/dim]")
+
+        t_desc = translate_text(description, lang) if description else ""
+        if t_desc != description:
+            console.print(f"  Description: [dim]{t_desc[:120]}...[/dim]")
+
+        # Use translated values only if user didn't provide explicit overrides.
+        if not ctx.title_override:
+            title = t_title
+        if not ctx.description_override:
+            description = t_desc
+
     # --- Stage: Upload to VK ---
     ctx.stage = PipelineStage.UPLOADING_TO_VK
     _log_stage(console, ctx.stage)
@@ -72,9 +96,6 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
     publish_at = datetime.datetime.now(datetime.UTC) + datetime.timedelta(
         hours=ctx.publish_delay_hours
     )
-
-    title = ctx.title_override or result.title
-    description = ctx.description_override or result.description
 
     console.print(f"  Title: [bold]{title}[/bold]")
     console.print(f"  Scheduled for: [bold]{publish_at.isoformat()}[/bold]")

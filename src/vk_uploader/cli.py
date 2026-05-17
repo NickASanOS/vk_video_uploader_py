@@ -21,6 +21,8 @@ _VALID_OVERRIDES = frozenset({
     "title",
     "description",
     "video_format",
+    "translation",
+    "lang",
 })
 
 
@@ -114,6 +116,10 @@ def main() -> None:
             config.defaults.wallpost = _parse_bool(overrides["wallpost"], "wallpost")
         if "video_format" in overrides:
             config.download.video_format = overrides["video_format"]
+        if "translation" in overrides:
+            config.defaults.translation = _parse_bool(overrides["translation"], "translation")
+        if "lang" in overrides:
+            config.defaults.lang = overrides["lang"]
 
         title_override = overrides.get("title")
         description_override = overrides.get("description")
@@ -192,6 +198,8 @@ def _print_usage() -> None:
     print("  token=<str>              VK access token (override config)")
     print("  group_id=<str>           VK group/community ID")
     print("  wallpost=true|false      Publish to community wall (default: false)")
+    print("  translation=true|false   Translate title/description (default: false)")
+    print("  lang=<code>              Target language for translation (default: ru)")
     print("  title=<str>              Video title (default: from YouTube)")
     print("  description=<str>        Video description (default: from YouTube)")
     print()

@@ -99,6 +99,8 @@ class DefaultsConfig:
     publish_delay_hours: int = 24
     thumbnail: bool = True
     wallpost: bool = False
+    translation: bool = False
+    lang: str = "ru"
 
 
 @dataclass

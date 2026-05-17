@@ -2,6 +2,13 @@
 
 All notable changes to vk_uploader.
 
+## [Unreleased]
+
+### Added
+- Translation feature: translate video title and description via Google Translate
+  (`deep-translator`, no API key required). Config fields: `translation` (bool),
+  `lang` (str, default `ru`). CLI: `translation=true lang=de`.
+
 ## [0.0.1] — 2026-05-17
 
 ### Added
