@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
 import requests
+from requests_toolbelt import (  # type: ignore[import-untyped]
+    MultipartEncoder,
+    MultipartEncoderMonitor,
+)
 
 from vk_uploader.models import UploadResult, VkSaveResponse
 
@@ -86,14 +91,45 @@ class VkClient:
             owner_id=int(resp_dict.get("owner_id", 0)),
         )
 
-    def upload_video_file(self, upload_url: str, file_path: Path) -> UploadResult:
-        """Multipart POST video file to the upload URL. Returns UploadResult."""
+    def upload_video_file(
+        self,
+        upload_url: str,
+        file_path: Path,
+        on_progress: Callable[[float], None] | None = None,
+    ) -> UploadResult:
+        """Multipart POST video file to the upload URL. Returns UploadResult.
+
+        If on_progress is given, it is called with a float 0–100 as the
+        upload proceeds.
+        """
+        file_size = file_path.stat().st_size
+
         with open(file_path, "rb") as f:
-            resp = requests.post(
-                upload_url,
-                files={"video_file": (file_path.name, f, "video/mp4")},
-                timeout=600,
+            encoder = MultipartEncoder(
+                fields={"video_file": (file_path.name, f, "video/mp4")},
             )
+
+            if on_progress and file_size > 0:
+
+                def _callback(monitor: MultipartEncoderMonitor) -> None:
+                    pct = (monitor.bytes_read / monitor.len) * 100
+                    on_progress(pct)
+
+                monitor = MultipartEncoderMonitor(encoder, _callback)
+                resp = requests.post(
+                    upload_url,
+                    data=monitor,
+                    headers={"Content-Type": monitor.content_type},
+                    timeout=600,
+                )
+            else:
+                resp = requests.post(
+                    upload_url,
+                    data=encoder,
+                    headers={"Content-Type": encoder.content_type},
+                    timeout=600,
+                )
+
         resp.raise_for_status()
         data: dict[str, Any] = resp.json()
 

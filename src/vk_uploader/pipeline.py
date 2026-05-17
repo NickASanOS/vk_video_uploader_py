@@ -32,11 +32,8 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
     def on_progress(d: dict[str, Any]) -> None:
         status = d.get("status", "")
         if status == "downloading":
-            pct_str = d.get("_percent_str", "0%").strip().rstrip("%")
-            try:
-                pct = float(pct_str)
-            except ValueError:
-                pct = 0
+            total = d.get("total_bytes") or d.get("total_bytes_estimate")
+            pct = (d.get("downloaded_bytes", 0) / total * 100) if total else 0
             desc = f"Downloading [dim]{format_progress(d)}[/dim]"
             progress.update(task_id, completed=pct, description=desc)
         elif status == "finished":
@@ -51,6 +48,8 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
     try:
         with progress:
             result = downloader.download(ctx.youtube_url)
+            # If download was instant (cached), ensure bar shows 100%.
+            progress.update(task_id, completed=100, description="Done")
     except DownloadError as e:
         ctx.stage = PipelineStage.ERROR
         ctx.error_message = str(e)
@@ -103,16 +102,25 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
         return
 
     ctx.vk_save_response = save_response
-    import json
-    console.print(
-        f"  [dim]video.save: upload_url={save_response.upload_url}, "
-        f"video_id={save_response.video_id}, owner_id={save_response.owner_id}[/dim]"
-    )
 
-    # Upload video file.
-    console.print("  Uploading video to VK...")
+    # Upload video file with progress bar.
+    upload_progress = create_download_progress()
+    upload_task = upload_progress.add_task("Uploading to VK", total=100)
+
+    file_size_mb = result.file_path.stat().st_size / (1024 * 1024)
+
+    def on_upload_progress(pct: float) -> None:
+        desc = f"Uploading to VK [dim]{file_size_mb:.0f} MiB[/dim]"
+        upload_progress.update(upload_task, completed=pct, description=desc)
+
     try:
-        upload_result = vk.upload_video_file(save_response.upload_url, result.file_path)
+        with upload_progress:
+            upload_result = vk.upload_video_file(
+                save_response.upload_url,
+                result.file_path,
+                on_progress=on_upload_progress,
+            )
+            upload_progress.update(upload_task, completed=100, description="Done")
     except VkApiError as e:
         ctx.stage = PipelineStage.ERROR
         ctx.error_message = str(e)
@@ -120,6 +128,7 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
         return
 
     ctx.upload_result = upload_result
+    upload_progress.stop()
     console.print("[green]Video uploaded.[/green]")
     console.print(f"  video_id: {upload_result.video_id}, owner_id: {upload_result.owner_id}")
 
@@ -137,10 +146,8 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
                 owner_id=upload_result.owner_id,
                 thumbnail_path=local_thumb,
             )
-            console.print(
-                f"  [dim]thumb response: {json.dumps(resp, indent=2, ensure_ascii=False)}[/dim]"
-            )
-            console.print("[green]Thumbnail uploaded.[/green]")
+            photo_id = resp.get("photo_id", "?")
+            console.print(f"[green]Thumbnail uploaded (photo_id={photo_id}).[/green]")
         except VkApiError as e:
             console.print(f"[yellow]Thumbnail upload failed (non-fatal): {e}[/yellow]")
         finally:
