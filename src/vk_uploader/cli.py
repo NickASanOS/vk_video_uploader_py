@@ -194,7 +194,7 @@ def _print_usage() -> None:
     print("  thumbnail=true|false     Enable/disable YouTube thumbnail upload")
     print("  publish_delay_hours=<n>  Hours to delay video publication (default: 24)")
     print("  output_dir=<path>        Download directory (default: ~/Downloads)")
-    print("  video_format=<fmt>       yt-dlp format string (default: bv*+ba/b)")
+    print("  video_format=<fmt>       yt-dlp format string (default: bv*+ba[ext=m4a]/bv*+ba/b)")
     print("  token=<str>              VK access token (override config)")
     print("  group_id=<str>           VK group/community ID")
     print("  wallpost=true|false      Publish to community wall (default: false)")

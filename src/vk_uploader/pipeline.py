@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import datetime
-from typing import Any
 
 from rich.console import Console
 
-from vk_uploader.logging_setup import create_download_progress, format_progress
+from vk_uploader.logging_setup import create_download_progress
 from vk_uploader.models import (
     AppConfig,
     DownloadError,
@@ -29,20 +28,43 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
     progress = create_download_progress()
     task_id = progress.add_task("Downloading", total=100)
 
-    def on_progress(d: dict[str, Any]) -> None:
-        status = d.get("status", "")
-        if status == "downloading":
-            total = d.get("total_bytes") or d.get("total_bytes_estimate")
-            pct = (d.get("downloaded_bytes", 0) / total * 100) if total else 0
-            desc = f"Downloading [dim]{format_progress(d)}[/dim]"
+    import re
+
+    def on_progress(d: dict[str, str]) -> None:
+        line = d.get("line", "")
+        # yt-dlp --newline outputs: [download]  45.2% of 1.2GiB at 5.0MiB/s ETA 02:30
+        m = re.search(r"\[download\]\s+([\d.]+)%", line)
+        if m:
+            pct = float(m.group(1))
+            speed_m = re.search(r"at\s+(\S+)", line)
+            eta_m = re.search(r"ETA\s+(\S+)", line)
+            parts = [f"{pct:.1f}%"]
+            if speed_m:
+                parts.append(f"{speed_m.group(1)}")
+            if eta_m:
+                parts.append(f"ETA {eta_m.group(1)}")
+            desc = "Downloading [dim]" + " • ".join(parts) + "[/dim]"
             progress.update(task_id, completed=pct, description=desc)
-        elif status == "finished":
-            progress.update(task_id, completed=100, description="Processing...")
+        elif "[Merger]" in line:
+            progress.update(task_id, completed=100, description="Merging video & audio...")
+        elif "[ExtractAudio]" in line:
+            progress.update(task_id, completed=100, description="Extracting audio...")
+        elif "[VideoConvertor]" in line:
+            progress.update(task_id, completed=100, description="Converting video...")
+
+    # Collect the last N lines of yt-dlp output for error reporting.
+    ytdlp_tail: list[str] = []
+
+    def on_log(line: str) -> None:
+        ytdlp_tail.append(line)
+        if len(ytdlp_tail) > 20:
+            ytdlp_tail.pop(0)
 
     downloader = YtDlpDownloader(
         output_dir=ctx.output_dir,
         video_format=config.download.video_format,
         on_progress=on_progress,
+        on_log=on_log,
     )
 
     try:
@@ -54,6 +76,10 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
         ctx.stage = PipelineStage.ERROR
         ctx.error_message = str(e)
         _log_error(console, str(e))
+        if ytdlp_tail:
+            console.print("[dim]Last yt-dlp output:[/dim]")
+            for line in ytdlp_tail[-8:]:
+                console.print(f"  [dim]{line}[/dim]")
         return
 
     ctx.download_result = result
@@ -88,6 +114,9 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
             title = t_title
         if not ctx.description_override:
             description = t_desc
+
+    # Always append the YouTube link to the description.
+    description = f"{description}\n\n{ctx.youtube_url}".strip()
 
     # --- Stage: Upload to VK ---
     ctx.stage = PipelineStage.UPLOADING_TO_VK

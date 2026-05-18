@@ -17,6 +17,19 @@ from vk_uploader.models import UploadResult, VkSaveResponse
 
 API_VERSION = "5.199"
 
+_MIME_MAP = {
+    ".mp4": "video/mp4",
+    ".mkv": "video/x-matroska",
+    ".webm": "video/webm",
+    ".mov": "video/quicktime",
+    ".avi": "video/x-msvideo",
+    ".flv": "video/x-flv",
+}
+
+
+def _mime_for(path: Path) -> str:
+    return _MIME_MAP.get(path.suffix.lower(), "video/mp4")
+
 
 class VkApiError(Exception):
     """Raised when the VK API returns an error response."""
@@ -103,10 +116,11 @@ class VkClient:
         upload proceeds.
         """
         file_size = file_path.stat().st_size
+        mime = _mime_for(file_path)
 
         with open(file_path, "rb") as f:
             encoder = MultipartEncoder(
-                fields={"video_file": (file_path.name, f, "video/mp4")},
+                fields={"video_file": (file_path.name, f, mime)},
             )
 
             if on_progress and file_size > 0:

@@ -5,9 +5,8 @@ description = "CLI tool to download YouTube videos and upload them to VK with sc
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
-    "yt-dlp>=2024.0",
-    "pyyaml>=6.0",
     "deep-translator>=1.11",
+    "pyyaml>=6.0",
     "requests>=2.31",
     "requests-toolbelt>=1.0",
     "rich>=13.0",

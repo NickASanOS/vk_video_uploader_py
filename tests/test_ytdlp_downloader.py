@@ -2,73 +2,76 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-from vk_uploader.models import DownloadResult
-from vk_uploader.ytdlp_downloader import YtDlpDownloader
+import pytest
+
+from vk_uploader.ytdlp_downloader import YtDlpDownloader, _find_ytdlp
 
 
-def test_download_returns_download_result(mocker):
-    info = {
-        "title": "Test Video",
-        "description": "A test description",
-        "thumbnail": "https://i.ytimg.com/thumb.jpg",
-        "duration": 120,
-        "uploader": "Test Channel",
-        "webpage_url": "https://www.youtube.com/watch?v=test",
-    }
-
-    output_dir = Path("/tmp/vk-test")
-
-    mock_ydl = mocker.patch("vk_uploader.ytdlp_downloader.YoutubeDL")
-    mock_ydl_instance = mock_ydl.return_value.__enter__.return_value
-    mock_ydl_instance.extract_info.return_value = info
-    mock_ydl_instance.prepare_filename.return_value = str(output_dir / "Test Video.mp4")
-
-    # Create the expected output file.
-    output_dir.mkdir(parents=True, exist_ok=True)
-    expected_file = output_dir / "Test Video.mp4"
-    expected_file.write_text("fake video content")
-
-    downloader = YtDlpDownloader(output_dir=output_dir)
-    result = downloader.download("https://www.youtube.com/watch?v=test")
-
-    assert isinstance(result, DownloadResult)
-    assert result.title == "Test Video"
-    assert result.description == "A test description"
-    assert result.thumbnail_url == "https://i.ytimg.com/thumb.jpg"
-    assert result.duration == 120
-    assert result.uploader == "Test Channel"
-
-    # Clean up
-    expected_file.unlink()
+def test_find_ytdlp_finds_bundled_binary():
+    path = _find_ytdlp()
+    assert path
+    assert "yt-dlp" in path
 
 
-def test_download_passes_options_to_ytdlp(mocker):
-    mocker.patch("vk_uploader.ytdlp_downloader.YoutubeDL")
-    mock_ydl = mocker.patch("vk_uploader.ytdlp_downloader.YoutubeDL")
-    mock_ydl_instance = mock_ydl.return_value.__enter__.return_value
-    mock_ydl_instance.extract_info.return_value = {
-        "title": "X",
-        "description": "",
-        "thumbnail": None,
-        "duration": 0,
-        "uploader": "",
-        "webpage_url": "url",
-    }
-    mock_ydl_instance.prepare_filename.return_value = "/tmp/files/X.mp4"
-    (Path("/tmp/files")).mkdir(parents=True, exist_ok=True)
-    Path("/tmp/files/X.mp4").write_text("data")
+class TestYtDlpDownloader:
+    def test_download_returns_result(self, mocker, tmp_path: Path):
+        info = {
+            "title": "Test Video",
+            "description": "A test description",
+            "thumbnail": "https://i.ytimg.com/thumb.jpg",
+            "duration": 120,
+            "uploader": "Test Channel",
+        }
 
-    output_dir = Path("/tmp/files")
-    downloader = YtDlpDownloader(output_dir=output_dir, video_format="best")
-    downloader.download("https://example.com/v")
+        # Mock _extract_info to return canned metadata.
+        mocker.patch.object(YtDlpDownloader, "_extract_info", return_value=info)
 
-    call_args = mock_ydl.call_args[1] if mock_ydl.call_args[1] else {}
-    assert call_args.get("params") is None  # passed as kwargs to YoutubeDL constructor
-    # Actually, check the options passed.
-    assert len(mock_ydl.call_args_list) > 0
-    # The first call to YoutubeDL(...) has the options dict.
-    ydl_opts = mock_ydl.call_args[0][0] if mock_ydl.call_args[0] else {}
-    assert ydl_opts.get("format") == "best"
-    assert "outtmpl" in ydl_opts
+        # Mock subprocess.Popen for the download step.
+        mock_proc = mocker.MagicMock()
+        mock_proc.stdout = iter(["line 1", "line 2"])
+        mock_proc.wait.return_value = 0
+        mocker.patch("subprocess.Popen", return_value=mock_proc)
+
+        # Create a fake output file.
+        out_file = tmp_path / "Test Video.mp4"
+        out_file.write_text("fake data")
+
+        downloader = YtDlpDownloader(output_dir=tmp_path)
+        result = downloader.download("https://example.com/v")
+
+        assert result.title == "Test Video"
+        assert result.description == "A test description"
+        assert result.thumbnail_url == "https://i.ytimg.com/thumb.jpg"
+        assert result.file_path == out_file
+
+    def test_download_nonzero_exit_raises(self, mocker, tmp_path: Path):
+        info = {"title": "X", "description": "", "duration": 0, "uploader": ""}
+        mocker.patch.object(YtDlpDownloader, "_extract_info", return_value=info)
+
+        mock_proc = mocker.MagicMock()
+        mock_proc.stdout = iter(["error: video unavailable"])
+        mock_proc.wait.return_value = 1
+        mocker.patch("subprocess.Popen", return_value=mock_proc)
+
+        downloader = YtDlpDownloader(output_dir=tmp_path)
+        try:
+            downloader.download("https://example.com/v")
+            pytest.fail("Should have raised")
+        except Exception:
+            pass
+
+    def test_extract_info_parses_json(self, mocker):
+        info = {"title": "Hello", "description": "World"}
+        mocker.patch(
+            "subprocess.run",
+            return_value=mocker.MagicMock(
+                returncode=0, stdout=json.dumps(info), stderr="",
+            ),
+        )
+
+        downloader = YtDlpDownloader(output_dir=Path("/tmp"))
+        result = downloader._extract_info("https://example.com/v")
+        assert result == info

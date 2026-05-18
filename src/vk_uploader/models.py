@@ -108,7 +108,7 @@ class DownloadConfig:
     """Download behaviour config section."""
 
     output_dir: str = "~/Downloads"
-    video_format: str = "bv*+ba/b"
+    video_format: str = "bv*+ba[ext=m4a]/bv*+ba/b"
 
 
 @dataclass
