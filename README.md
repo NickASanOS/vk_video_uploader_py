@@ -6,9 +6,29 @@ CLI tool to download YouTube videos and upload them to VK with delayed publishin
 
 - **Linux** (primary supported platform)
 - **Python 3.11+**
-- **yt-dlp** (installed automatically as a dependency)
+- **yt-dlp** — standalone binary, required. [Install](https://github.com/yt-dlp/yt-dlp#installation)
+- **ffmpeg** 7.x+ — for video/audio merging. System or [static build](https://github.com/BtbN/FFmpeg-Builds)
+- **deno** (optional) — enables all YouTube formats via EJS challenge solver
 - **VK App** with `video` scope ([create one](https://vk.com/editapp))
 - **VK Community** (group) to upload videos to
+
+### Install dependencies
+
+```bash
+# yt-dlp (standalone binary)
+curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+  -o ~/.local/bin/yt-dlp && chmod +x ~/.local/bin/yt-dlp
+
+# ffmpeg 7.x (static build from BtbN, recommended for 4K AV1 support)
+mkdir -p ~/ffmpeg && cd ~/ffmpeg
+wget https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-linux64-gpl.tar.xz
+tar xf ffmpeg-master-latest-linux64-gpl.tar.xz
+# vk_uploader auto-detects ~/ffmpeg-master-latest-linux64-gpl/bin/ffmpeg
+
+# deno (optional, for better YouTube format availability)
+curl -fsSL https://deno.land/install.sh | sh
+# Ensure ~/.deno/bin is in your PATH
+```
 
 ## Install
 
@@ -25,7 +45,7 @@ After install, the `vk_uploader` command is available:
 .venv/bin/vk_uploader --help
 ```
 
-To make it available system-wide without activating the venv each time:
+To make it available system-wide:
 
 ```bash
 ln -s $(pwd)/.venv/bin/vk_uploader ~/.local/bin/vk_uploader
@@ -78,6 +98,8 @@ vk_uploader <url> thumbnail=false publish_delay_hours=48 output_dir=/tmp/videos
 | `token=` | str | — | VK access token (override config) |
 | `group_id=` | str | — | VK community ID |
 | `wallpost=` | bool | `false` | Publish to community wall |
+| `translation=` | bool | `false` | Translate title/description |
+| `lang=` | str | `ru` | Target language for translation |
 | `title=` | str | — | Video title (default: from YouTube) |
 | `description=` | str | — | Video description (default: from YouTube) |
 
@@ -97,6 +119,8 @@ defaults:
   publish_delay_hours: 24
   thumbnail: true
   wallpost: false
+  translation: false
+  lang: ru
 
 download:
   output_dir: "~/Downloads"
