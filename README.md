@@ -9,7 +9,7 @@ CLI tool to download YouTube videos and upload them to VK with delayed publishin
 - **yt-dlp** — standalone binary, required. [Install](https://github.com/yt-dlp/yt-dlp#installation)
 - **ffmpeg** 7.x+ — for video/audio merging. System or [static build](https://github.com/BtbN/FFmpeg-Builds)
 - **deno** (optional) — enables all YouTube formats via EJS challenge solver
-- **VK App** with `video` scope ([create one](https://dev.vk.com/ru/admin/create-app))
+- **VK App** with `video` scope ([create one](https://dev.vk.com/en/admin/create-app))
 - **VK Community** (group) to upload videos to
 
 ### Install dependencies
@@ -57,7 +57,7 @@ ln -s $(pwd)/.venv/bin/vk_uploader ~/.local/bin/vk_uploader
 
 ### 1. Create VK App
 
-Go to [dev.vk.com/ru/admin/create-app](https://dev.vk.com/ru/admin/create-app), create a **Standalone** application.  
+Go to [dev.vk.com/en/admin/create-app](https://dev.vk.com/en/admin/create-app), create a **Standalone** application.  
 Note your **App ID**.
 
 ### 2. First run — authorize
