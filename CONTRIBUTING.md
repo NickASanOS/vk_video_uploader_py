@@ -1,25 +1,43 @@
 # Contributing
 
-## Setup
+Contributions are welcome. All changes go through Pull Requests — direct
+pushes to `main` are blocked.
+
+## Development setup
 
 ```bash
-git clone git@github.com:NickASanOS/vk_video_uploader_py.git
+# Fork the repository on GitHub, then clone your fork
+git clone git@github.com:YOUR_USERNAME/vk_video_uploader_py.git
 cd vk_video_uploader_py
 make install-dev
 ```
 
-## Development workflow
+## Workflow
 
-| Command | What it does |
-|---------|-------------|
-| `make test` | Run tests (`pytest -v`) |
-| `make lint` | Check code style (`ruff`) |
-| `make lint-fix` | Auto-fix lint issues (`ruff --fix`) |
-| `make typecheck` | Run type checking (`mypy`) |
-| `make check` | Run all three: lint, typecheck, test |
-| `make clean` | Remove virtualenv and caches |
+```bash
+# 1. Create a feature branch
+git checkout -b feature/my-change
 
-Run `make check` before pushing.
+# 2. Make changes, write tests
+
+# 3. Run full checks
+make check
+
+# 4. Commit and push to YOUR fork
+git add -A
+git commit -m "Add: short description"
+git push -u origin feature/my-change
+
+# 5. Open a Pull Request on GitHub from your branch to NickASanOS/main
+```
+
+## Guidelines
+
+- Python 3.11+. Match the existing style (`ruff check` must pass).
+- Type annotations required (`mypy src/` must pass).
+- Tests for new functionality (`pytest tests/` must pass).
+- Keep the PR focused. One feature or fix per PR.
+- The maintainer reviews and merges. Feedback may be given via review comments.
 
 ## Project structure
 
@@ -30,15 +48,28 @@ src/vk_uploader/
 ├── models.py           # Dataclasses, enums, exceptions
 ├── auth.py             # VK OAuth2 Implicit Flow
 ├── vk_api.py           # VK API client
-├── ytdlp_downloader.py # yt-dlp wrapper
+├── ytdlp_downloader.py # yt-dlp wrapper (standalone binary)
 ├── thumbnail.py        # Thumbnail download helper
-├── pipeline.py         # Download → upload orchestration
+├── translate.py        # Translation via deep-translator
+├── pipeline.py         # Download → translate → upload orchestration
 └── logging_setup.py    # Rich console setup
+
+tests/
+├── test_auth.py
+├── test_cli.py
+├── test_config.py
+├── test_thumbnail.py
+├── test_translate.py
+├── test_vk_api.py
+└── test_ytdlp_downloader.py
 ```
 
-## CI
+## Commands
 
-CI runs on every push to `main` and every pull request:
-- **lint**: `ruff check src/ tests/`
-- **typecheck**: `mypy src/`
-- **test**: `pytest tests/` on Python 3.11, 3.12, 3.13
+| Command | Purpose |
+|---------|---------|
+| `make check` | Run lint + typecheck + tests |
+| `make test` | Run tests only |
+| `make lint` | Run ruff only |
+| `make lint-fix` | Auto-fix lint issues |
+| `make typecheck` | Run mypy only |
