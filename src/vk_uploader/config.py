@@ -89,9 +89,9 @@ class ConfigFile:
         download_data = data.get("download", {})
 
         vk = VkConfig(
-            access_token=str(vk_data.get("access_token", "")),
-            group_id=str(vk_data.get("group_id", "")),
-            app_id=str(vk_data.get("app_id", "")),
+            access_token=str(vk_data.get("access_token") or ""),
+            group_id=str(vk_data.get("group_id") or ""),
+            app_id=str(vk_data.get("app_id") or ""),
             expires_at=vk_data.get("expires_at"),
             user_id=vk_data.get("user_id"),
         )

@@ -173,3 +173,14 @@ def test_translation_defaults_when_missing(tmp_path: Path):
     config = cfg.load()
     assert config.defaults.translation is False
     assert config.defaults.lang == "ru"
+
+
+def test_yaml_null_becomes_empty_string(tmp_path: Path):
+    p = tmp_path / CONFIG_FILENAME
+    p.write_text(yaml.safe_dump({"vk": {"access_token": None, "group_id": None, "app_id": None}}))
+
+    cfg = ConfigFile(config_dir=str(tmp_path), filename=CONFIG_FILENAME)
+    config = cfg.load()
+    assert config.vk.access_token == ""
+    assert config.vk.group_id == ""
+    assert config.vk.app_id == ""

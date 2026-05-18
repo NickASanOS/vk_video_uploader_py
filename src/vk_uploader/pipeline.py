@@ -46,11 +46,11 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
             desc = "Downloading [dim]" + " • ".join(parts) + "[/dim]"
             progress.update(task_id, completed=pct, description=desc)
         elif "[Merger]" in line:
-            progress.update(task_id, completed=100, description="Merging video & audio...")
+            progress.update(task_id, total=None, description="Merging video & audio...")
         elif "[ExtractAudio]" in line:
-            progress.update(task_id, completed=100, description="Extracting audio...")
+            progress.update(task_id, total=None, description="Extracting audio...")
         elif "[VideoConvertor]" in line:
-            progress.update(task_id, completed=100, description="Converting video...")
+            progress.update(task_id, total=None, description="Converting video...")
 
     # Collect the last N lines of yt-dlp output for error reporting.
     ytdlp_tail: list[str] = []
@@ -183,28 +183,54 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
     console.print(f"  video_id: {upload_result.video_id}, owner_id: {upload_result.owner_id}")
 
     # ── Upload thumbnail separately ──
+    thumbnail_ok = True
     if thumb_url:
         ctx.stage = PipelineStage.UPLOADING_THUMBNAIL
         _log_stage(console, ctx.stage)
 
+        from vk_uploader.models import UploadError
         from vk_uploader.thumbnail import download_thumbnail
 
-        local_thumb = download_thumbnail(thumb_url, ctx.output_dir)
         try:
-            resp = vk.upload_video_thumbnail(
-                video_id=upload_result.video_id,
-                owner_id=upload_result.owner_id,
-                thumbnail_path=local_thumb,
-            )
-            photo_id = resp.get("photo_id", "?")
-            console.print(f"[green]Thumbnail uploaded (photo_id={photo_id}).[/green]")
-        except VkApiError as e:
-            console.print(f"[yellow]Thumbnail upload failed (non-fatal): {e}[/yellow]")
-        finally:
-            local_thumb.unlink(missing_ok=True)
+            local_thumb = download_thumbnail(thumb_url, ctx.output_dir)
+            try:
+                resp = vk.upload_video_thumbnail(
+                    video_id=upload_result.video_id,
+                    owner_id=upload_result.owner_id,
+                    thumbnail_path=local_thumb,
+                )
+                photo_id = resp.get("photo_id", "?")
+                console.print(f"[green]Thumbnail uploaded (photo_id={photo_id}).[/green]")
+            except VkApiError as e:
+                console.print(f"[yellow]Thumbnail upload failed (non-fatal): {e}[/yellow]")
+                thumbnail_ok = False
+            finally:
+                local_thumb.unlink(missing_ok=True)
+        except (UploadError, Exception) as e:
+            console.print(f"[yellow]Thumbnail download failed (non-fatal): {e}[/yellow]")
+            thumbnail_ok = False
+    else:
+        thumbnail_ok = False
 
     ctx.stage = PipelineStage.COMPLETED
-    _log_stage(console, ctx.stage)
+
+    # ── Summary ──
+    console.print("\n[bold]── Summary ──[/bold]")
+    console.print(f"  Download:        [green]✓[/green] {result.file_path}")
+    if config.defaults.translation:
+        console.print(f"  Translation:     [green]✓[/green] → {config.defaults.lang}")
+    console.print(
+        f"  Video upload:    [green]✓[/green] "
+        f"(video_id: {upload_result.video_id}, owner_id: {upload_result.owner_id})"
+    )
+    if ctx.thumbnail_enabled:
+        status = "[green]✓[/green]" if thumbnail_ok else "[red]✗[/red]"
+        console.print(f"  Thumbnail:       {status}")
+    if config.defaults.wallpost:
+        console.print("  Wall post:       [green]✓[/green] (scheduled)")
+    console.print(
+        f"  Publish at:      {publish_at.strftime('%Y-%m-%d %H:%M:%S')} UTC"
+    )
     console.print("[bold green]Done![/bold green]")
 
 

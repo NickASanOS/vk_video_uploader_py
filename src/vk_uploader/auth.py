@@ -34,7 +34,7 @@ def run_oauth_flow(app_id: str) -> AuthResult:
         f"client_id={app_id}&"
         f"redirect_uri={_VK_BLANK}&"
         "display=page&"
-        "scope=video&"
+        "scope=video,wall&"
         "response_type=token&"
         "v=5.199"
     )
@@ -91,6 +91,10 @@ def ensure_token(console: Console, config_file: ConfigFile, config: AppConfig) -
     from datetime import datetime
 
     token = config.vk.access_token.strip()
+    # Guard against "None"/"null" string from YAML null → str(None).
+    if token and token.lower() in ("none", "null"):
+        token = ""
+
     if token:
         expires_str = config.vk.expires_at
         if expires_str:

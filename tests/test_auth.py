@@ -65,3 +65,22 @@ class TestRunOauthFlow:
             pytest.fail("Should have raised AuthError")
         except AuthError as e:
             assert "No access_token" in str(e)
+
+
+class TestEnsureToken:
+    def test_none_token_triggers_auth(self, mocker, tmp_path):
+        """ensure_token should trigger OAuth when token is 'None' (YAML null)."""
+        from vk_uploader.auth import ensure_token
+        from vk_uploader.config import ConfigFile
+        from vk_uploader.models import AppConfig, VkConfig
+
+        console = mocker.MagicMock()
+        config = AppConfig(vk=VkConfig(access_token="None", app_id="123"))
+        cfg = ConfigFile(config_dir=str(tmp_path), filename="test.yaml")
+
+        mock_flow = mocker.patch("vk_uploader.auth.run_oauth_flow",
+            return_value=mocker.MagicMock(access_token="real-token", expires_at=None, user_id="1"))
+
+        ensure_token(console, cfg, config)
+        mock_flow.assert_called_once()
+        assert config.vk.access_token == "real-token"

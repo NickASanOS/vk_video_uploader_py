@@ -110,12 +110,29 @@ class YtDlpDownloader:
         duration = int(str(info.get("duration", 0)))
         uploader = str(info.get("uploader", ""))
 
-        # 2. Download.
+        # 2. Check if the merged file already exists (skip re-download).
+        for ext in (".mp4", ".mkv", ".webm"):
+            candidate = self._output_dir / f"{title}{ext}"
+            if candidate.exists() and candidate.stat().st_size > 0:
+                self._log(f"Skipping download — file exists: {candidate}")
+                return DownloadResult(
+                    file_path=candidate,
+                    title=title,
+                    description=description,
+                    thumbnail_url=str(thumbnail_url) if thumbnail_url else None,
+                    duration=duration,
+                    uploader=uploader,
+                    webpage_url=url,
+                )
+
+        # 3. Download.
         args = [
             self._binary,
             "--newline",
             "-f", self._video_format,
             "--merge-output-format", "mp4",
+            # AV1 + faststart crashes ffmpeg; disable it.
+            "--postprocessor-args", "ffmpeg:-movflags -faststart",
             "-o", out_tpl,
             "--no-playlist",
         ]
