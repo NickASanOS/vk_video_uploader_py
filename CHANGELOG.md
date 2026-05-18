@@ -2,6 +2,20 @@
 
 All notable changes to vk_uploader.
 
+## [0.0.3] — 2026-05-18
+
+### Fixed
+- OAuth now requests `video,wall` scopes — wall posting works again.
+- YAML `null` access_token no longer becomes literal `"None"` string.
+- AV1+MP4 merge failure (disabled `-movflags +faststart`).
+- Cached video re-download: existing merged files are reused.
+- Thumbnail errors no longer crash the pipeline (non-fatal, shown in summary).
+
+### Added
+- Final protocol/summary after each run (download, translation, upload, thumbnail, wall post).
+- 56 tests (2 new: YAML null handling, token "None" validation).
+- CI: Node.js 24 opt-in, no deprecation warnings.
+
 ## [0.0.2] — 2026-05-18
 
 ### Added
