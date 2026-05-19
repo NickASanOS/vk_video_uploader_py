@@ -101,6 +101,7 @@ class DefaultsConfig:
     wallpost: bool = False
     translation: bool = False
     lang: str = "ru"
+    cookies_from_browser: str = ""
 
 
 @dataclass
@@ -150,6 +151,11 @@ class AuthTimeoutError(AuthError):
 
 class DownloadError(VkUploaderError):
     """yt-dlp download failure."""
+    pass
+
+
+class BotDetectionError(DownloadError):
+    """YouTube bot-detection — needs browser cookies."""
     pass
 
 

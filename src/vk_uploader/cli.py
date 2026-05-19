@@ -3,10 +3,20 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
+
+from rich.console import Console
 
 from vk_uploader.config import ConfigFile
 from vk_uploader.logging_setup import create_console
-from vk_uploader.models import DownloadError, JobContext, PipelineStage, UsageError
+from vk_uploader.models import (
+    AuthError,
+    BotDetectionError,
+    DownloadError,
+    JobContext,
+    PipelineStage,
+    UsageError,
+)
 from vk_uploader.pipeline import run_pipeline
 from vk_uploader.vk_api import VkApiError
 
@@ -23,6 +33,7 @@ _VALID_OVERRIDES = frozenset({
     "video_format",
     "translation",
     "lang",
+    "cookies_from_browser",
 })
 
 
@@ -120,17 +131,17 @@ def main() -> None:
             config.defaults.translation = _parse_bool(overrides["translation"], "translation")
         if "lang" in overrides:
             config.defaults.lang = overrides["lang"]
+        if "cookies_from_browser" in overrides:
+            config.defaults.cookies_from_browser = overrides["cookies_from_browser"]
 
         title_override = overrides.get("title")
         description_override = overrides.get("description")
 
         # --- Validate ---
+        from vk_uploader.auth import ensure_token
+        ensure_token(console, config_file, config)
+        config = config_file.load()  # reload after auth
         token = config.vk.access_token.strip()
-        if not token:
-            from vk_uploader.auth import ensure_token
-            ensure_token(console, config_file, config)
-            config = config_file.load()  # reload after auth
-            token = config.vk.access_token.strip()
         if not token:
             console.print("[red]VK access token is required.[/red]")
             console.print("Run vk_uploader without arguments to configure.")
@@ -155,8 +166,25 @@ def main() -> None:
             description_override=description_override,
         )
 
-        # --- Run pipeline ---
-        run_pipeline(console, ctx, config)
+        # --- Run pipeline (with bot-detection retry) ---
+        while True:
+            try:
+                run_pipeline(console, ctx, config)
+                break
+            except BotDetectionError:
+                if config.defaults.cookies_from_browser:
+                    # Already configured but still failing — propagate.
+                    raise
+                browser = _prompt_browser(console)
+                if browser is None:
+                    raise
+                config.defaults.cookies_from_browser = browser
+                config_file.save(config)
+                console.print(
+                    f"[green]Saved cookies_from_browser={browser} to config."
+                    f" Retrying...[/green]"
+                )
+                continue
 
         if ctx.stage == PipelineStage.ERROR:
             sys.exit(1)
@@ -164,6 +192,13 @@ def main() -> None:
     except UsageError as e:
         console.print(f"[red]{e}[/red]")
         sys.exit(2)
+    except AuthError as e:
+        console.print(f"[red]{e}[/red]")
+        sys.exit(1)
+    except BotDetectionError as e:
+        console.print("[red]YouTube bot detection — browser cookies required.[/red]")
+        console.print(f"[dim]{e}[/dim]")
+        sys.exit(1)
     except (VkApiError, DownloadError) as e:
         console.print(f"[red]{e}[/red]")
         sys.exit(1)
@@ -204,3 +239,84 @@ def _print_usage() -> None:
     print("  description=<str>        Video description (default: from YouTube)")
     print()
     print("Config file: ~/.config/vk_uploader/config.yaml")
+    print()
+    print("Supported browsers for cookies (yt-dlp --cookies-from-browser):")
+    print("  firefox, chrome, chromium, brave, edge, opera, vivaldi")
+    print()
+    print("Use cookies_from_browser=<browser> to avoid YouTube bot detection.")
+
+
+_BROWSER_DIRS: dict[str, list[str]] = {
+    "firefox": ["~/.mozilla/firefox", "~/.config/mozilla/firefox"],
+    "chrome": ["~/.config/google-chrome"],
+    "chromium": ["~/.config/chromium", "~/snap/chromium/common/chromium"],
+    "brave": ["~/.config/Brave-Browser"],
+    "edge": ["~/.config/microsoft-edge"],
+    "opera": ["~/.config/opera"],
+    "vivaldi": ["~/.config/vivaldi"],
+}
+
+
+def _detect_browsers() -> list[str]:
+    """Return a list of browser names that appear to be installed."""
+    found: list[str] = []
+    for name, path_patterns in _BROWSER_DIRS.items():
+        for pattern in path_patterns:
+            p = Path(pattern).expanduser()
+            if p.is_dir():
+                found.append(name)
+                break
+    return found
+
+
+def _prompt_browser(console: Console) -> str | None:
+    """Detect available browsers and ask the user which one to use for cookies.
+
+    Returns the browser name (yt-dlp compatible), or None if cancelled.
+    """
+    available = _detect_browsers()
+
+    console.print("\n[yellow]YouTube requires browser authentication.[/yellow]")
+    console.print(
+        "yt-dlp can use your browser cookies to prove you're not a bot."
+    )
+
+    if available:
+        console.print(f"\nDetected browsers: [bold]{', '.join(available)}[/bold]")
+        console.print(
+            "[dim]Type a browser name (or press Enter for 'firefox'),"
+            " or 'skip' to abort:[/dim]"
+        )
+    else:
+        console.print(
+            "\n[dim]No browsers auto-detected."
+            " Supported: firefox, chrome, chromium, brave, edge, opera, vivaldi[/dim]"
+        )
+        console.print("[dim]Enter a browser name, or 'skip' to abort:[/dim]")
+
+    # Default to the first detected browser, or firefox.
+    default = available[0] if available else "firefox"
+
+    try:
+        choice = input(f"Browser [{default}]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        return None
+
+    if choice in ("skip", "no", "none", "q", ""):
+        # Empty input with no available browsers means skip.
+        if choice == "" and available:
+            return default
+        if choice == "":
+            return None
+        return None
+
+    if choice == "":
+        return default
+
+    # Validate: must be one of the known browser names.
+    if choice in _BROWSER_DIRS:
+        return choice
+
+    console.print(f"[red]Unknown browser: {choice!r}."
+                  f" Supported: {', '.join(sorted(_BROWSER_DIRS))}[/red]")
+    return None

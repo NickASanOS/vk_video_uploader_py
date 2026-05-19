@@ -9,6 +9,7 @@ from rich.console import Console
 from vk_uploader.logging_setup import create_download_progress
 from vk_uploader.models import (
     AppConfig,
+    BotDetectionError,
     DownloadError,
     JobContext,
     PipelineStage,
@@ -75,6 +76,7 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
         video_format=config.download.video_format,
         on_progress=on_progress,
         on_log=on_log,
+        cookies_from_browser=config.defaults.cookies_from_browser or None,
     )
 
     try:
@@ -83,6 +85,9 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
             # If download was instant (cached), ensure bar shows 100%.
             progress.update(task_id, completed=100, description="Done")
     except DownloadError as e:
+        # Re-raise BotDetectionError so the CLI can prompt for browser cookies.
+        if isinstance(e, BotDetectionError):
+            raise
         ctx.stage = PipelineStage.ERROR
         ctx.error_message = str(e)
         _log_error(console, str(e))

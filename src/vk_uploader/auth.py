@@ -115,6 +115,13 @@ def ensure_token(console: Console, config_file: ConfigFile, config: AppConfig) -
                 raise AuthError("VK App ID is required.")
             config.vk.app_id = app_id
 
+        console.print()
+        console.print(
+            "[bold]Make sure you are logged into VK in your default browser, "
+            "then press ENTER.[/bold]"
+        )
+        input()
+
         console.print("Opening browser for VK authorization...")
         result = run_oauth_flow(app_id)
 

@@ -61,6 +61,7 @@ class ConfigFile:
                 "wallpost": config.defaults.wallpost,
                 "translation": config.defaults.translation,
                 "lang": config.defaults.lang,
+                "cookies_from_browser": config.defaults.cookies_from_browser,
             },
             "download": {
                 "output_dir": config.download.output_dir,
@@ -101,6 +102,7 @@ class ConfigFile:
             wallpost=bool(defaults_data.get("wallpost", False)),
             translation=bool(defaults_data.get("translation", False)),
             lang=str(defaults_data.get("lang", "ru")),
+            cookies_from_browser=str(defaults_data.get("cookies_from_browser", "")),
         )
         download = DownloadConfig(
             output_dir=str(download_data.get("output_dir", "~/Downloads")),

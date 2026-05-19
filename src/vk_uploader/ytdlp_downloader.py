@@ -10,7 +10,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from vk_uploader.models import DownloadError, DownloadResult
+from vk_uploader.models import BotDetectionError, DownloadError, DownloadResult
 
 _FFMPEG_CANDIDATES = [
     os.path.expanduser("~/ffmpeg-master-latest-linux64-gpl/bin/ffmpeg"),
@@ -89,12 +89,14 @@ class YtDlpDownloader:
         video_format: str = "bv*+ba[ext=m4a]/bv*+ba/b",
         on_progress: Callable[[dict[str, str]], None] | None = None,
         on_log: Callable[[str], None] | None = None,
+        cookies_from_browser: str | None = None,
     ):
         self._output_dir = output_dir
         self._video_format = video_format
         self._on_progress = on_progress
         self._on_log = on_log
         self._binary = _find_ytdlp()
+        self._cookies_from_browser = cookies_from_browser
 
     def download(self, url: str) -> DownloadResult:
         """Download a YouTube video and return a DownloadResult with metadata."""
@@ -136,6 +138,8 @@ class YtDlpDownloader:
             "-o", out_tpl,
             "--no-playlist",
         ]
+        if self._cookies_from_browser:
+            args += ["--cookies-from-browser", self._cookies_from_browser]
         ffmpeg_path = _find_ffmpeg()
         if ffmpeg_path:
             args += ["--ffmpeg-location", ffmpeg_path]
@@ -174,10 +178,27 @@ class YtDlpDownloader:
 
         exit_code = proc.wait()
         if exit_code != 0:
-            detail = "\n".join(stderr_lines[-5:]) if stderr_lines else "no output"
-            raise DownloadError(f"yt-dlp exited with code {exit_code}:\n{detail}")
+            # yt-dlp may have created the merged file despite a non-fatal
+            # post-processing error (e.g. renaming a leftover .part file).
+            merged_path = self._output_dir / f"{title}.mp4"
+            if not merged_path.exists() or merged_path.stat().st_size == 0:
+                detail = "\n".join(stderr_lines[-5:]) if stderr_lines else "no output"
+                raise DownloadError(f"yt-dlp exited with code {exit_code}:\n{detail}")
+            self._log(f"yt-dlp exited with code {exit_code} but merged file exists, continuing")
 
         # 3. Find the downloaded file.
+        merged_path = self._output_dir / f"{title}.mp4"
+        if merged_path.exists() and merged_path.stat().st_size > 0:
+            return DownloadResult(
+                file_path=merged_path,
+                title=title,
+                description=description,
+                thumbnail_url=str(thumbnail_url) if thumbnail_url else None,
+                duration=duration,
+                uploader=uploader,
+                webpage_url=url,
+            )
+
         files = sorted(
             [f for f in self._output_dir.iterdir() if f.is_file()],
             key=lambda f: f.stat().st_mtime,
@@ -209,6 +230,8 @@ class YtDlpDownloader:
             "--dump-json",
             "--no-playlist",
         ]
+        if self._cookies_from_browser:
+            args += ["--cookies-from-browser", self._cookies_from_browser]
         deno = _deno_path()
         if deno:
             args += ["--js-runtimes", "deno"]
@@ -222,6 +245,8 @@ class YtDlpDownloader:
 
         if result.returncode != 0:
             stderr = result.stderr.strip()
+            if "Sign in to confirm" in stderr:
+                raise BotDetectionError(stderr)
             raise DownloadError(f"yt-dlp metadata failed: {stderr}")
 
         try:
