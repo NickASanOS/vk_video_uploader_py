@@ -12,6 +12,7 @@ from vk_uploader.models import (
     DownloadError,
     JobContext,
     PipelineStage,
+    UploadError,
 )
 from vk_uploader.vk_api import VkApiError, VkClient
 from vk_uploader.ytdlp_downloader import YtDlpDownloader
@@ -46,11 +47,20 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
             desc = "Downloading [dim]" + " • ".join(parts) + "[/dim]"
             progress.update(task_id, completed=pct, description=desc)
         elif "[Merger]" in line:
-            progress.update(task_id, total=None, description="Merging video & audio...")
+            progress.update(
+                task_id, total=None, completed=0,
+                description="Merging video & audio...",
+            )
         elif "[ExtractAudio]" in line:
-            progress.update(task_id, total=None, description="Extracting audio...")
+            progress.update(
+                task_id, total=None, completed=0,
+                description="Extracting audio...",
+            )
         elif "[VideoConvertor]" in line:
-            progress.update(task_id, total=None, description="Converting video...")
+            progress.update(
+                task_id, total=None, completed=0,
+                description="Converting video...",
+            )
 
     # Collect the last N lines of yt-dlp output for error reporting.
     ytdlp_tail: list[str] = []
@@ -171,7 +181,7 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
                 on_progress=on_upload_progress,
             )
             upload_progress.update(upload_task, completed=100, description="Done")
-    except VkApiError as e:
+    except (VkApiError, UploadError) as e:
         ctx.stage = PipelineStage.ERROR
         ctx.error_message = str(e)
         _log_error(console, str(e))
@@ -188,7 +198,6 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
         ctx.stage = PipelineStage.UPLOADING_THUMBNAIL
         _log_stage(console, ctx.stage)
 
-        from vk_uploader.models import UploadError
         from vk_uploader.thumbnail import download_thumbnail
 
         try:

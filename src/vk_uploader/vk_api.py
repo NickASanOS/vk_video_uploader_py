@@ -13,7 +13,7 @@ from requests_toolbelt import (  # type: ignore[import-untyped]
     MultipartEncoderMonitor,
 )
 
-from vk_uploader.models import UploadResult, VkSaveResponse
+from vk_uploader.models import UploadError, UploadResult, VkSaveResponse
 
 API_VERSION = "5.199"
 
@@ -123,26 +123,32 @@ class VkClient:
                 fields={"video_file": (file_path.name, f, mime)},
             )
 
-            if on_progress and file_size > 0:
+            try:
+                if on_progress and file_size > 0:
 
-                def _callback(monitor: MultipartEncoderMonitor) -> None:
-                    pct = (monitor.bytes_read / monitor.len) * 100
-                    on_progress(pct)
+                    def _callback(monitor: MultipartEncoderMonitor) -> None:
+                        pct = (monitor.bytes_read / monitor.len) * 100
+                        on_progress(pct)
 
-                monitor = MultipartEncoderMonitor(encoder, _callback)
-                resp = requests.post(
-                    upload_url,
-                    data=monitor,
-                    headers={"Content-Type": monitor.content_type},
-                    timeout=600,
-                )
-            else:
-                resp = requests.post(
-                    upload_url,
-                    data=encoder,
-                    headers={"Content-Type": encoder.content_type},
-                    timeout=600,
-                )
+                    monitor = MultipartEncoderMonitor(encoder, _callback)
+                    resp = requests.post(
+                        upload_url,
+                        data=monitor,
+                        headers={"Content-Type": monitor.content_type},
+                        timeout=600,
+                    )
+                else:
+                    resp = requests.post(
+                        upload_url,
+                        data=encoder,
+                        headers={"Content-Type": encoder.content_type},
+                        timeout=600,
+                    )
+            except requests.RequestException as e:
+                raise UploadError(
+                    f"Network error during upload: {e}. "
+                    f"VK upload servers can be unstable with large files — try again."
+                ) from e
 
         resp.raise_for_status()
         data: dict[str, Any] = resp.json()
