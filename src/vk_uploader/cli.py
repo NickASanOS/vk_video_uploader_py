@@ -142,8 +142,12 @@ def main() -> None:
 
         # --- Validate ---
         from vk_uploader.auth import ensure_token
+
+        old_token = config.vk.access_token
         ensure_token(console, config_file, config)
-        config = config_file.load()  # reload after auth
+        # Only reload if the token was changed (avoids wiping CLI overrides).
+        if config.vk.access_token != old_token:
+            config = config_file.load()
         token = config.vk.access_token.strip()
         if not token:
             console.print("[red]VK access token is required.[/red]")
