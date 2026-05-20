@@ -2,6 +2,22 @@
 
 All notable changes to vk_uploader.
 
+## [0.0.5] — 2026-05-20
+
+### Added
+- Subtitle download from YouTube (`subtitles` config option, CLI `subtitles=true|false`).
+- SRT parsing, writing, and translation with batching (reuses existing `translate_text()`).
+- Subtitle language selection: target (`lang`) > English > any available.
+- `video_id` extraction from YouTube URL stored in `DownloadResult`.
+
+### Changed
+- Thumbnail: prioritized `img.youtube.com/vi/<id>/maxresdefault.jpg` over yt-dlp's
+  language-suffixed URL (which can 404).
+- Thumbnail download: fallback to yt-dlp URL if `img.youtube.com` fails.
+
+### Fixed
+- CLI overrides no longer wiped by `config = config_file.load()` after `ensure_token`.
+
 ## [0.0.4] — 2026-05-19
 
 ### Fixed
@@ -56,6 +72,7 @@ All notable changes to vk_uploader.
 - Full CI pipeline: lint (ruff), typecheck (mypy), tests (pytest) on 3.11–3.13
 - 46 unit and integration tests
 
+[0.0.4]: https://github.com/NickASanOS/vk_video_uploader_py/releases/tag/v0.0.4
 [0.0.3]: https://github.com/NickASanOS/vk_video_uploader_py/releases/tag/v0.0.3
 [0.0.2]: https://github.com/NickASanOS/vk_video_uploader_py/releases/tag/v0.0.2
 [0.0.1]: https://github.com/NickASanOS/vk_video_uploader_py/releases/tag/v0.0.1
