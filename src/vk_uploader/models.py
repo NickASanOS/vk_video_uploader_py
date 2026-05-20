@@ -100,6 +100,7 @@ class DefaultsConfig:
     thumbnail: bool = True
     wallpost: bool = False
     translation: bool = False
+    subtitles: bool = False
     lang: str = "ru"
     cookies_from_browser: str = ""
 

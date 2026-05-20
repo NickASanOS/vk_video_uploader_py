@@ -175,6 +175,25 @@ def test_translation_defaults_when_missing(tmp_path: Path):
     assert config.defaults.lang == "ru"
 
 
+def test_subtitles_defaults_to_false(tmp_path: Path):
+    p = tmp_path / CONFIG_FILENAME
+    p.write_text(yaml.safe_dump({"defaults": {}}))
+
+    cfg = ConfigFile(config_dir=str(tmp_path), filename=CONFIG_FILENAME)
+    config = cfg.load()
+    assert config.defaults.subtitles is False
+
+
+def test_load_subtitles_true(tmp_path: Path):
+    p = tmp_path / CONFIG_FILENAME
+    p.write_text(yaml.safe_dump({"defaults": {"subtitles": True, "lang": "de"}}))
+
+    cfg = ConfigFile(config_dir=str(tmp_path), filename=CONFIG_FILENAME)
+    config = cfg.load()
+    assert config.defaults.subtitles is True
+    assert config.defaults.lang == "de"
+
+
 def test_yaml_null_becomes_empty_string(tmp_path: Path):
     p = tmp_path / CONFIG_FILENAME
     p.write_text(yaml.safe_dump({"vk": {"access_token": None, "group_id": None, "app_id": None}}))

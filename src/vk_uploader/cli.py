@@ -32,6 +32,7 @@ _VALID_OVERRIDES = frozenset({
     "description",
     "video_format",
     "translation",
+    "subtitles",
     "lang",
     "cookies_from_browser",
 })
@@ -129,6 +130,8 @@ def main() -> None:
             config.download.video_format = overrides["video_format"]
         if "translation" in overrides:
             config.defaults.translation = _parse_bool(overrides["translation"], "translation")
+        if "subtitles" in overrides:
+            config.defaults.subtitles = _parse_bool(overrides["subtitles"], "subtitles")
         if "lang" in overrides:
             config.defaults.lang = overrides["lang"]
         if "cookies_from_browser" in overrides:
@@ -234,7 +237,8 @@ def _print_usage() -> None:
     print("  group_id=<str>           VK group/community ID")
     print("  wallpost=true|false      Publish to community wall (default: false)")
     print("  translation=true|false   Translate title/description (default: false)")
-    print("  lang=<code>              Target language for translation (default: ru)")
+    print("  subtitles=true|false     Download and translate subtitles (default: false)")
+    print("  lang=<code>              Target language for translation/subtitles (default: ru)")
     print("  title=<str>              Video title (default: from YouTube)")
     print("  description=<str>        Video description (default: from YouTube)")
     print()

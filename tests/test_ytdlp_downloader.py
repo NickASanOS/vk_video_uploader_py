@@ -75,3 +75,50 @@ class TestYtDlpDownloader:
         downloader = YtDlpDownloader(output_dir=Path("/tmp"))
         result = downloader._extract_info("https://example.com/v")
         assert result == info
+
+    def test_subtitles_args_present_when_lang_set(self, mocker, tmp_path: Path):
+        info = {"title": "V", "description": "", "duration": 0, "uploader": ""}
+        mocker.patch.object(YtDlpDownloader, "_extract_info", return_value=info)
+
+        mock_popen = mocker.patch("subprocess.Popen")
+        mock_proc = mocker.MagicMock()
+        mock_proc.stdout = iter([])
+        mock_proc.wait.return_value = 0
+
+        def create_file(*args, **kwargs):
+            (tmp_path / "V.mp4").write_text("fake")
+            return mock_proc
+        mock_popen.side_effect = create_file
+
+        downloader = YtDlpDownloader(output_dir=tmp_path, subtitles_lang="ru")
+        downloader.download("https://example.com/v")
+
+        args = mock_popen.call_args[0][0]
+        assert "--write-subs" in args
+        assert "--write-auto-subs" in args
+        assert "--sub-langs" in args
+        assert "--convert-subs" in args
+        idx = args.index("--sub-langs")
+        assert "ru" in args[idx + 1]
+        assert "en" in args[idx + 1]
+
+    def test_subtitles_args_absent_when_lang_none(self, mocker, tmp_path: Path):
+        info = {"title": "V", "description": "", "duration": 0, "uploader": ""}
+        mocker.patch.object(YtDlpDownloader, "_extract_info", return_value=info)
+
+        mock_popen = mocker.patch("subprocess.Popen")
+        mock_proc = mocker.MagicMock()
+        mock_proc.stdout = iter([])
+        mock_proc.wait.return_value = 0
+
+        def create_file(*args, **kwargs):
+            (tmp_path / "V.mp4").write_text("fake")
+            return mock_proc
+        mock_popen.side_effect = create_file
+
+        downloader = YtDlpDownloader(output_dir=tmp_path, subtitles_lang=None)
+        downloader.download("https://example.com/v")
+
+        args = mock_popen.call_args[0][0]
+        assert "--write-subs" not in args
+        assert "--write-auto-subs" not in args

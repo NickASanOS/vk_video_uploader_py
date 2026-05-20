@@ -90,6 +90,7 @@ class YtDlpDownloader:
         on_progress: Callable[[dict[str, str]], None] | None = None,
         on_log: Callable[[str], None] | None = None,
         cookies_from_browser: str | None = None,
+        subtitles_lang: str | None = None,
     ):
         self._output_dir = output_dir
         self._video_format = video_format
@@ -97,6 +98,7 @@ class YtDlpDownloader:
         self._on_log = on_log
         self._binary = _find_ytdlp()
         self._cookies_from_browser = cookies_from_browser
+        self._subtitles_lang = subtitles_lang
 
     def download(self, url: str) -> DownloadResult:
         """Download a YouTube video and return a DownloadResult with metadata."""
@@ -138,6 +140,13 @@ class YtDlpDownloader:
             "-o", out_tpl,
             "--no-playlist",
         ]
+        if self._subtitles_lang:
+            args += [
+                "--write-subs",
+                "--write-auto-subs",
+                "--sub-langs", f"{self._subtitles_lang},en.*",
+                "--convert-subs", "srt",
+            ]
         if self._cookies_from_browser:
             args += ["--cookies-from-browser", self._cookies_from_browser]
         ffmpeg_path = _find_ffmpeg()
