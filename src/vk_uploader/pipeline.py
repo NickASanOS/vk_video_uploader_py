@@ -196,8 +196,14 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
     console.print(f"  Title: [bold]{title}[/bold]")
     console.print(f"  Scheduled for: [bold]{publish_at.isoformat()}[/bold]")
 
-    thumb_url = result.thumbnail_url if ctx.thumbnail_enabled else None
+    thumb_url: str | None = None
     if ctx.thumbnail_enabled:
+        # Prefer img.youtube.com — more reliable than yt-dlp's thumbnail field.
+        if result.video_id:
+            thumb_url = f"https://img.youtube.com/vi/{result.video_id}/maxresdefault.jpg"
+        elif result.thumbnail_url:
+            thumb_url = result.thumbnail_url
+
         if thumb_url:
             console.print(f"  Thumbnail: [dim]{thumb_url}[/dim]")
         else:
@@ -257,8 +263,23 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
 
         from vk_uploader.thumbnail import download_thumbnail
 
-        try:
-            local_thumb = download_thumbnail(thumb_url, ctx.output_dir)
+        # If primary URL fails and we have a fallback, try it.
+        urls_to_try = [thumb_url]
+        if result.video_id and result.thumbnail_url and result.thumbnail_url != thumb_url:
+            urls_to_try.append(result.thumbnail_url)
+
+        local_thumb = None
+        for url in urls_to_try:
+            try:
+                local_thumb = download_thumbnail(url, ctx.output_dir)
+                break
+            except (UploadError, Exception):
+                if url == urls_to_try[-1]:
+                    raise
+
+        if local_thumb is None:
+            thumbnail_ok = False
+        else:
             try:
                 resp = vk.upload_video_thumbnail(
                     video_id=upload_result.video_id,
@@ -272,9 +293,6 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
                 thumbnail_ok = False
             finally:
                 local_thumb.unlink(missing_ok=True)
-        except (UploadError, Exception) as e:
-            console.print(f"[yellow]Thumbnail download failed (non-fatal): {e}[/yellow]")
-            thumbnail_ok = False
     else:
         thumbnail_ok = False
 

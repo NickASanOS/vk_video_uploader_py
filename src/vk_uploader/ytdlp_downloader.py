@@ -4,13 +4,33 @@ from __future__ import annotations
 
 import glob
 import os
+import re
 import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 from vk_uploader.models import BotDetectionError, DownloadError, DownloadResult
+
+_YT_ID_RE = re.compile(r"([\w-]{11})")
+
+
+def _extract_youtube_id(url: str) -> str | None:
+    """Extract the 11-char YouTube video ID from a URL."""
+    parsed = urlparse(url)
+    if parsed.netloc in ("www.youtube.com", "youtube.com", "m.youtube.com", "music.youtube.com"):
+        qs = parse_qs(parsed.query)
+        return qs.get("v", [None])[0]
+    if parsed.netloc == "youtu.be":
+        return parsed.path.lstrip("/")
+    # Short links like https://youtube.com/shorts/VIDEO_ID
+    m = _YT_ID_RE.search(parsed.path)
+    if m:
+        return m.group(1)
+    return None
+
 
 _FFMPEG_CANDIDATES = [
     os.path.expanduser("~/ffmpeg-master-latest-linux64-gpl/bin/ffmpeg"),
@@ -127,6 +147,7 @@ class YtDlpDownloader:
                     duration=duration,
                     uploader=uploader,
                     webpage_url=url,
+                    video_id=_extract_youtube_id(url),
                 )
 
         # 3. Download.
@@ -206,6 +227,7 @@ class YtDlpDownloader:
                 duration=duration,
                 uploader=uploader,
                 webpage_url=url,
+                video_id=_extract_youtube_id(url),
             )
 
         files = sorted(
@@ -228,6 +250,7 @@ class YtDlpDownloader:
             duration=duration,
             uploader=uploader,
             webpage_url=url,
+            video_id=_extract_youtube_id(url),
         )
 
     def _extract_info(self, url: str) -> dict[str, Any]:

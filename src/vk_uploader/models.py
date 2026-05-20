@@ -41,6 +41,7 @@ class DownloadResult:
     duration: int
     uploader: str
     webpage_url: str
+    video_id: str | None = None
 
 
 @dataclass
