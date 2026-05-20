@@ -2,6 +2,18 @@
 
 All notable changes to vk_uploader.
 
+## [0.0.4] — 2026-05-19
+
+### Fixed
+- Test `test_none_token_triggers_auth`: missing `input()` mock caused CI failure.
+
+### Added
+- Contributing guide, PR template, CODEOWNERS, branch protection rules.
+- PyYAML type stubs for mypy (`types-PyYAML` in dev deps).
+
+### Changed
+- Upload pipeline: improved error handling and progress reporting.
+
 ## [0.0.3] — 2026-05-18
 
 ### Fixed
@@ -44,5 +56,6 @@ All notable changes to vk_uploader.
 - Full CI pipeline: lint (ruff), typecheck (mypy), tests (pytest) on 3.11–3.13
 - 46 unit and integration tests
 
+[0.0.3]: https://github.com/NickASanOS/vk_video_uploader_py/releases/tag/v0.0.3
 [0.0.2]: https://github.com/NickASanOS/vk_video_uploader_py/releases/tag/v0.0.2
 [0.0.1]: https://github.com/NickASanOS/vk_video_uploader_py/releases/tag/v0.0.1

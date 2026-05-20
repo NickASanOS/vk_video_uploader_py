@@ -6,7 +6,7 @@ CLI tool to download YouTube videos and upload them to VK with delayed publishin
 
 - **Linux** (primary supported platform)
 - **Python 3.11+**
-- **yt-dlp** — standalone binary, required. [Install](https://github.com/yt-dlp/yt-dlp#installation)
+- **yt-dlp** — standalone binary, required. [Nightly builds](https://github.com/yt-dlp/yt-dlp-nightly-builds/releases)
 - **ffmpeg** 7.x+ — for video/audio merging. System or [static build](https://github.com/BtbN/FFmpeg-Builds)
 - **deno** (optional) — enables all YouTube formats via EJS challenge solver
 - **VK App** with `video` scope ([create one](https://dev.vk.com/en/admin/create-app))
@@ -15,14 +15,14 @@ CLI tool to download YouTube videos and upload them to VK with delayed publishin
 ### Install dependencies
 
 ```bash
-# yt-dlp (standalone binary)
-curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+# yt-dlp (nightly standalone binary)
+curl -L https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp_linux \
   -o ~/.local/bin/yt-dlp && chmod +x ~/.local/bin/yt-dlp
 
 # ffmpeg 7.x (static build from BtbN, recommended for 4K AV1 support)
-mkdir -p ~/ffmpeg && cd ~/ffmpeg
 wget https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-linux64-gpl.tar.xz
-tar xf ffmpeg-master-latest-linux64-gpl.tar.xz
+tar xf ffmpeg-master-latest-linux64-gpl.tar.xz -C ~
+rm ffmpeg-master-latest-linux64-gpl.tar.xz
 # vk_uploader auto-detects ~/ffmpeg-master-latest-linux64-gpl/bin/ffmpeg
 
 # deno (optional, for better YouTube format availability)

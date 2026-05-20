@@ -78,6 +78,7 @@ class TestEnsureToken:
         config = AppConfig(vk=VkConfig(access_token="None", app_id="123"))
         cfg = ConfigFile(config_dir=str(tmp_path), filename="test.yaml")
 
+        mocker.patch("vk_uploader.auth.input")
         mock_flow = mocker.patch("vk_uploader.auth.run_oauth_flow",
             return_value=mocker.MagicMock(access_token="real-token", expires_at=None, user_id="1"))
 
