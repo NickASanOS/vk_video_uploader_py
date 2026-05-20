@@ -27,9 +27,12 @@ class TestParseArgs:
             "https://youtube.com/watch?v=abc",
             "thumbnail=false",
             "publish_delay_hours=72",
+            "subtitles=true",
         ])
         assert url == "https://youtube.com/watch?v=abc"
-        assert overrides == {"thumbnail": "false", "publish_delay_hours": "72"}
+        assert overrides == {
+            "thumbnail": "false", "publish_delay_hours": "72", "subtitles": "true",
+        }
 
     def test_only_overrides_raises_usage_error(self):
         with pytest.raises(UsageError, match="YouTube URL is required"):

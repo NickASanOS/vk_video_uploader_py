@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+from pathlib import Path
 
 from rich.console import Console
 
@@ -77,6 +78,7 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
         on_progress=on_progress,
         on_log=on_log,
         cookies_from_browser=config.defaults.cookies_from_browser or None,
+        subtitles_lang=config.defaults.lang if config.defaults.subtitles else None,
     )
 
     try:
@@ -105,6 +107,56 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
         console.print(f"  Description: {result.description[:120]}...")
 
     ctx.stage = PipelineStage.DOWNLOAD_COMPLETED
+
+    # --- Subtitle processing (optional) ---
+    if config.defaults.subtitles:
+        _log_sub_status = ""
+
+        video_stem = result.file_path.stem
+        srt_files = sorted(result.file_path.parent.glob(f"{video_stem}*.srt"))
+
+        if srt_files:
+            lang = config.defaults.lang
+
+            def _srt_score(p: Path) -> int:
+                parts = p.stem.rsplit(".", 1)
+                code = parts[-1] if len(parts) > 1 else ""
+                if code == lang:
+                    return 3
+                if code.startswith(lang[:2]):
+                    return 2
+                if code.startswith("en"):
+                    return 1
+                return 0
+
+            srt_files.sort(key=_srt_score, reverse=True)
+            best_srt = srt_files[0]
+
+            # Detect language of the best SRT.
+            parts = best_srt.stem.rsplit(".", 1)
+            srt_lang = parts[-1] if len(parts) > 1 else ""
+
+            if srt_lang != lang and not srt_lang.startswith(lang[:2]):
+                # Translate to target language.
+                from vk_uploader.srt import parse_srt, translate_srt_entries, write_srt
+
+                console.print(f"  Translating subtitles {srt_lang} → {lang}...")
+                entries = parse_srt(best_srt)
+                translated = translate_srt_entries(entries, lang)
+                target_srt = result.file_path.with_suffix(f".{lang}.srt")
+                write_srt(translated, target_srt)
+                _log_sub_status = f"translated {srt_lang} → {lang}"
+                # Clean up all raw SRT files downloaded by yt-dlp.
+                for f in srt_files:
+                    f.unlink(missing_ok=True)
+            else:
+                _log_sub_status = f"[green]✓ ({srt_lang})[/green]"
+                # Keep only the target language SRT, clean up the rest.
+                for f in srt_files:
+                    if f != best_srt:
+                        f.unlink(missing_ok=True)
+        else:
+            _log_sub_status = "[yellow]not found[/yellow]"
 
     # --- Translation (optional) ---
     title = ctx.title_override or result.title
@@ -144,8 +196,14 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
     console.print(f"  Title: [bold]{title}[/bold]")
     console.print(f"  Scheduled for: [bold]{publish_at.isoformat()}[/bold]")
 
-    thumb_url = result.thumbnail_url if ctx.thumbnail_enabled else None
+    thumb_url: str | None = None
     if ctx.thumbnail_enabled:
+        # Prefer img.youtube.com — more reliable than yt-dlp's thumbnail field.
+        if result.video_id:
+            thumb_url = f"https://img.youtube.com/vi/{result.video_id}/maxresdefault.jpg"
+        elif result.thumbnail_url:
+            thumb_url = result.thumbnail_url
+
         if thumb_url:
             console.print(f"  Thumbnail: [dim]{thumb_url}[/dim]")
         else:
@@ -205,8 +263,23 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
 
         from vk_uploader.thumbnail import download_thumbnail
 
-        try:
-            local_thumb = download_thumbnail(thumb_url, ctx.output_dir)
+        # If primary URL fails and we have a fallback, try it.
+        urls_to_try = [thumb_url]
+        if result.video_id and result.thumbnail_url and result.thumbnail_url != thumb_url:
+            urls_to_try.append(result.thumbnail_url)
+
+        local_thumb = None
+        for url in urls_to_try:
+            try:
+                local_thumb = download_thumbnail(url, ctx.output_dir)
+                break
+            except (UploadError, Exception):
+                if url == urls_to_try[-1]:
+                    raise
+
+        if local_thumb is None:
+            thumbnail_ok = False
+        else:
             try:
                 resp = vk.upload_video_thumbnail(
                     video_id=upload_result.video_id,
@@ -220,9 +293,6 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
                 thumbnail_ok = False
             finally:
                 local_thumb.unlink(missing_ok=True)
-        except (UploadError, Exception) as e:
-            console.print(f"[yellow]Thumbnail download failed (non-fatal): {e}[/yellow]")
-            thumbnail_ok = False
     else:
         thumbnail_ok = False
 
@@ -233,6 +303,9 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
     console.print(f"  Download:        [green]✓[/green] {result.file_path}")
     if config.defaults.translation:
         console.print(f"  Translation:     [green]✓[/green] → {config.defaults.lang}")
+    if config.defaults.subtitles:
+        sub_summary = _log_sub_status if _log_sub_status else "[green]✓[/green]"
+        console.print(f"  Subtitles:       {sub_summary}")
     console.print(
         f"  Video upload:    [green]✓[/green] "
         f"(video_id: {upload_result.video_id}, owner_id: {upload_result.owner_id})"

@@ -60,6 +60,7 @@ class ConfigFile:
                 "thumbnail": config.defaults.thumbnail,
                 "wallpost": config.defaults.wallpost,
                 "translation": config.defaults.translation,
+                "subtitles": config.defaults.subtitles,
                 "lang": config.defaults.lang,
                 "cookies_from_browser": config.defaults.cookies_from_browser,
             },
@@ -101,6 +102,7 @@ class ConfigFile:
             thumbnail=bool(defaults_data.get("thumbnail", True)),
             wallpost=bool(defaults_data.get("wallpost", False)),
             translation=bool(defaults_data.get("translation", False)),
+            subtitles=bool(defaults_data.get("subtitles", False)),
             lang=str(defaults_data.get("lang", "ru")),
             cookies_from_browser=str(defaults_data.get("cookies_from_browser", "")),
         )

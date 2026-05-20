@@ -41,6 +41,7 @@ class DownloadResult:
     duration: int
     uploader: str
     webpage_url: str
+    video_id: str | None = None
 
 
 @dataclass
@@ -100,6 +101,7 @@ class DefaultsConfig:
     thumbnail: bool = True
     wallpost: bool = False
     translation: bool = False
+    subtitles: bool = False
     lang: str = "ru"
     cookies_from_browser: str = ""
 

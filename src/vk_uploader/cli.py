@@ -32,6 +32,7 @@ _VALID_OVERRIDES = frozenset({
     "description",
     "video_format",
     "translation",
+    "subtitles",
     "lang",
     "cookies_from_browser",
 })
@@ -129,6 +130,8 @@ def main() -> None:
             config.download.video_format = overrides["video_format"]
         if "translation" in overrides:
             config.defaults.translation = _parse_bool(overrides["translation"], "translation")
+        if "subtitles" in overrides:
+            config.defaults.subtitles = _parse_bool(overrides["subtitles"], "subtitles")
         if "lang" in overrides:
             config.defaults.lang = overrides["lang"]
         if "cookies_from_browser" in overrides:
@@ -139,8 +142,12 @@ def main() -> None:
 
         # --- Validate ---
         from vk_uploader.auth import ensure_token
+
+        old_token = config.vk.access_token
         ensure_token(console, config_file, config)
-        config = config_file.load()  # reload after auth
+        # Only reload if the token was changed (avoids wiping CLI overrides).
+        if config.vk.access_token != old_token:
+            config = config_file.load()
         token = config.vk.access_token.strip()
         if not token:
             console.print("[red]VK access token is required.[/red]")
@@ -234,7 +241,8 @@ def _print_usage() -> None:
     print("  group_id=<str>           VK group/community ID")
     print("  wallpost=true|false      Publish to community wall (default: false)")
     print("  translation=true|false   Translate title/description (default: false)")
-    print("  lang=<code>              Target language for translation (default: ru)")
+    print("  subtitles=true|false     Download and translate subtitles (default: false)")
+    print("  lang=<code>              Target language for translation/subtitles (default: ru)")
     print("  title=<str>              Video title (default: from YouTube)")
     print("  description=<str>        Video description (default: from YouTube)")
     print()

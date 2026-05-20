@@ -4,13 +4,33 @@ from __future__ import annotations
 
 import glob
 import os
+import re
 import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 from vk_uploader.models import BotDetectionError, DownloadError, DownloadResult
+
+_YT_ID_RE = re.compile(r"([\w-]{11})")
+
+
+def _extract_youtube_id(url: str) -> str | None:
+    """Extract the 11-char YouTube video ID from a URL."""
+    parsed = urlparse(url)
+    if parsed.netloc in ("www.youtube.com", "youtube.com", "m.youtube.com", "music.youtube.com"):
+        qs = parse_qs(parsed.query)
+        return qs.get("v", [None])[0]
+    if parsed.netloc == "youtu.be":
+        return parsed.path.lstrip("/")
+    # Short links like https://youtube.com/shorts/VIDEO_ID
+    m = _YT_ID_RE.search(parsed.path)
+    if m:
+        return m.group(1)
+    return None
+
 
 _FFMPEG_CANDIDATES = [
     os.path.expanduser("~/ffmpeg-master-latest-linux64-gpl/bin/ffmpeg"),
@@ -90,6 +110,7 @@ class YtDlpDownloader:
         on_progress: Callable[[dict[str, str]], None] | None = None,
         on_log: Callable[[str], None] | None = None,
         cookies_from_browser: str | None = None,
+        subtitles_lang: str | None = None,
     ):
         self._output_dir = output_dir
         self._video_format = video_format
@@ -97,6 +118,7 @@ class YtDlpDownloader:
         self._on_log = on_log
         self._binary = _find_ytdlp()
         self._cookies_from_browser = cookies_from_browser
+        self._subtitles_lang = subtitles_lang
 
     def download(self, url: str) -> DownloadResult:
         """Download a YouTube video and return a DownloadResult with metadata."""
@@ -125,6 +147,7 @@ class YtDlpDownloader:
                     duration=duration,
                     uploader=uploader,
                     webpage_url=url,
+                    video_id=_extract_youtube_id(url),
                 )
 
         # 3. Download.
@@ -138,6 +161,13 @@ class YtDlpDownloader:
             "-o", out_tpl,
             "--no-playlist",
         ]
+        if self._subtitles_lang:
+            args += [
+                "--write-subs",
+                "--write-auto-subs",
+                "--sub-langs", f"{self._subtitles_lang},en.*",
+                "--convert-subs", "srt",
+            ]
         if self._cookies_from_browser:
             args += ["--cookies-from-browser", self._cookies_from_browser]
         ffmpeg_path = _find_ffmpeg()
@@ -197,6 +227,7 @@ class YtDlpDownloader:
                 duration=duration,
                 uploader=uploader,
                 webpage_url=url,
+                video_id=_extract_youtube_id(url),
             )
 
         files = sorted(
@@ -219,6 +250,7 @@ class YtDlpDownloader:
             duration=duration,
             uploader=uploader,
             webpage_url=url,
+            video_id=_extract_youtube_id(url),
         )
 
     def _extract_info(self, url: str) -> dict[str, Any]:

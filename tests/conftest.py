@@ -23,6 +23,7 @@ def sample_config() -> AppConfig:
             publish_delay_hours=24,
             thumbnail=True,
             wallpost=False,
+            subtitles=False,
         ),
         download=DownloadConfig(
             output_dir="~/Downloads",
