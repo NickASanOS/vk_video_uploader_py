@@ -74,6 +74,7 @@ class JobContext:
     wallpost: bool
     title_override: str | None = None
     description_override: str | None = None
+    album_spec: str | None = None
     # Filled in during pipeline execution:
     download_result: DownloadResult | None = None
     vk_save_response: VkSaveResponse | None = None

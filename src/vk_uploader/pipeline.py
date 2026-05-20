@@ -210,6 +210,16 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
         else:
             console.print("  [yellow]No thumbnail URL in YouTube metadata[/yellow]")
 
+    # --- Album resolution (optional) ---
+    album_id: str | None = None
+    album_status = ""
+    if ctx.album_spec:
+        from vk_uploader.vk_api import resolve_album
+
+        album_id, album_status = resolve_album(
+            vk, ctx.group_id, ctx.album_spec, console,
+        )
+
     # video.save (without thumb_url — unsupported by VK API 5.199).
     try:
         save_response = vk.video_save(
@@ -218,6 +228,7 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
             group_id=ctx.group_id,
             publish_at=publish_at,
             wallpost=ctx.wallpost,
+            album_id=album_id,
         )
     except VkApiError as e:
         ctx.stage = PipelineStage.ERROR
@@ -316,6 +327,8 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
         f"  Video upload:    [green]✓[/green] "
         f"(video_id: {upload_result.video_id}, owner_id: {upload_result.owner_id})"
     )
+    if album_status:
+        console.print(f"  Album:           {album_status}")
     if ctx.thumbnail_enabled:
         status = "[green]✓[/green]" if thumbnail_ok else "[red]✗[/red]"
         console.print(f"  Thumbnail:       {status}")

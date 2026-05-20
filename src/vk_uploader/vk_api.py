@@ -5,7 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from rich.console import Console
 
 import requests
 from requests_toolbelt import (  # type: ignore[import-untyped]
@@ -66,6 +69,28 @@ class VkClient:
         response: Any = data["response"]
         return response
 
+    def get_albums(self, owner_id: str, count: int = 50) -> list[dict[str, Any]]:
+        """Get video albums for an owner (group or user)."""
+        result = self.call_method("video.getAlbums", {
+            "owner_id": owner_id,
+            "count": str(count),
+            "extended": "1",
+        })
+        if isinstance(result, dict):
+            items = result.get("items", [])
+            return items if isinstance(items, list) else []
+        return []
+
+    def add_album(self, group_id: str, title: str) -> int:
+        """Create a new video album in a community. Returns album_id."""
+        result = self.call_method("video.addAlbum", {
+            "group_id": group_id,
+            "title": title,
+        })
+        if isinstance(result, dict):
+            return int(result.get("album_id", 0))
+        return 0
+
     def users_get(self) -> list[dict[str, Any]]:
         """Verify token validity and return user info."""
         result = self.call_method("users.get", {})
@@ -79,6 +104,7 @@ class VkClient:
         publish_at: datetime,
         wallpost: bool = False,
         thumb_url: str | None = None,
+        album_id: str | None = None,
     ) -> VkSaveResponse:
         """Call video.save. Returns VkSaveResponse with upload_url, video_id, owner_id."""
         params: dict[str, str] = {
@@ -90,6 +116,8 @@ class VkClient:
         }
         if thumb_url:
             params["thumb_url"] = thumb_url
+        if album_id:
+            params["album_id"] = album_id
 
         response = self.call_method("video.save", params)
         resp_dict: dict[str, Any] = response if isinstance(response, dict) else {}
@@ -219,3 +247,97 @@ class VkClient:
             },
         )
         return cast(dict[str, Any], result)
+
+
+def resolve_album(
+    vk: VkClient,
+    group_id: str,
+    album_spec: str,
+    console: Console,
+) -> tuple[str | None, str]:
+    """Resolve an album spec to an album_id and status label.
+
+    Two modes:
+    - ``album_spec == "true"``: interactive — list albums, pick or create new.
+    - otherwise: find album by name (case-insensitive), create if not found.
+
+    Returns ``(album_id, status_label)`` where *album_id* is ``None`` on
+    failure/cancel and *status_label* is a short description for the summary.
+    """
+    owner_id = f"-{group_id}"
+
+    # Fetch existing albums.
+    try:
+        albums = vk.get_albums(owner_id)
+    except VkApiError as e:
+        console.print(f"[yellow]Failed to fetch albums: {e}[/yellow]")
+        return None, "[red]✗ (album fetch failed)[/red]"
+
+    if album_spec.lower() == "true":
+        # ── Interactive mode ──
+        if albums:
+            console.print("\n[bold]Albums in community:[/bold]")
+            for i, a in enumerate(albums, 1):
+                title = a.get("title", "?")
+                cnt = a.get("count", 0)
+                console.print(f"  {i}. {title} [dim]({cnt} videos)[/dim]")
+            console.print("  [n] [bold]Create new album...[/bold]")
+        else:
+            console.print("[dim]No albums in this community.[/dim]")
+            return _create_album_interactive(vk, group_id, console)
+
+        choice = console.input("\nEnter number (or 'n' for new): ").strip()
+        if choice.lower() == "n":
+            return _create_album_interactive(vk, group_id, console)
+
+        try:
+            idx = int(choice) - 1
+            if 0 <= idx < len(albums):
+                album = albums[idx]
+                album_id = str(album.get("id", ""))
+                title = album.get("title", "?")
+                return album_id, f"[green]✓ ({title})[/green]"
+        except ValueError:
+            pass
+
+        console.print("[yellow]Invalid choice, skipping album.[/yellow]")
+        return None, "[yellow]skipped[/yellow]"
+    else:
+        # ── Non-interactive: find by name or create ──
+        target = album_spec.strip().lower()
+        for a in albums:
+            if a.get("title", "").lower() == target:
+                album_id = str(a.get("id", ""))
+                return album_id, f"[green]✓ ({a.get('title','?')})[/green]"
+
+        # Not found — create new.
+        try:
+            new_id = vk.add_album(group_id, album_spec.strip())
+            if new_id:
+                return str(new_id), f"[green]✓ ({album_spec.strip()})[/green]"
+        except VkApiError as e:
+            console.print(f"[yellow]Failed to create album: {e}[/yellow]")
+            return None, "[red]✗ (create failed)[/red]"
+
+        return None, "[yellow]skipped[/yellow]"
+
+
+def _create_album_interactive(
+    vk: VkClient,
+    group_id: str,
+    console: Console,
+) -> tuple[str | None, str]:
+    """Prompt for album title and create it. Returns (album_id, status)."""
+    title = console.input("New album title: ").strip()
+    if not title:
+        console.print("[yellow]No title — skipping album.[/yellow]")
+        return None, "[yellow]skipped[/yellow]"
+
+    try:
+        new_id = vk.add_album(group_id, title)
+        if new_id:
+            return str(new_id), f"[green]✓ ({title})[/green]"
+    except VkApiError as e:
+        console.print(f"[yellow]Failed to create album: {e}[/yellow]")
+
+    return None, "[red]✗ (create failed)[/red]"

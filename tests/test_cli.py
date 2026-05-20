@@ -34,6 +34,20 @@ class TestParseArgs:
             "thumbnail": "false", "publish_delay_hours": "72", "subtitles": "true",
         }
 
+    def test_album_override(self):
+        url, overrides = parse_args([
+            "https://youtube.com/watch?v=abc",
+            "album=true",
+        ])
+        assert overrides == {"album": "true"}
+
+    def test_album_override_name(self):
+        url, overrides = parse_args([
+            "https://youtube.com/watch?v=abc",
+            "album=My Favorites",
+        ])
+        assert overrides == {"album": "My Favorites"}
+
     def test_only_overrides_raises_usage_error(self):
         with pytest.raises(UsageError, match="YouTube URL is required"):
             parse_args(["thumbnail=false"])

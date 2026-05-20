@@ -206,3 +206,134 @@ class TestUploadVideoThumbnail:
             "video.getThumbUploadUrl" in str(c)
             for c in call_mock.call_args_list
         )
+
+
+class TestGetAlbums:
+    def test_returns_album_list(self, mocker):
+        mocker.patch(
+            "vk_uploader.vk_api.requests.post",
+            return_value=make_ok_response({
+                "count": 2,
+                "items": [
+                    {"id": 10, "title": "Album A", "count": 5},
+                    {"id": 11, "title": "Album B", "count": 3},
+                ],
+            }),
+        )
+        client = VkClient("tok")
+        albums = client.get_albums("-12345")
+        assert len(albums) == 2
+        assert albums[0]["title"] == "Album A"
+
+    def test_returns_empty_list_when_no_albums(self, mocker):
+        mocker.patch(
+            "vk_uploader.vk_api.requests.post",
+            return_value=make_ok_response({"count": 0, "items": []}),
+        )
+        client = VkClient("tok")
+        albums = client.get_albums("-12345")
+        assert albums == []
+
+
+class TestAddAlbum:
+    def test_returns_album_id(self, mocker):
+        mocker.patch(
+            "vk_uploader.vk_api.requests.post",
+            return_value=make_ok_response({"album_id": 42}),
+        )
+        client = VkClient("tok")
+        album_id = client.add_album("12345", "My Playlist")
+        assert album_id == 42
+
+
+class TestVideoSaveAlbum:
+    def test_passes_album_id_when_set(self, mocker):
+        mock = mocker.patch(
+            "vk_uploader.vk_api.requests.post",
+            return_value=make_ok_response({
+                "upload_url": "https://up.vk.com/v",
+                "video_id": 1,
+                "owner_id": -1,
+            }),
+        )
+        client = VkClient("tok")
+        client.video_save(
+            name="x", description="x", group_id="1",
+            publish_at=datetime.datetime(2026, 6, 1, 12, 0, 0),
+            album_id="42",
+        )
+        call_data = mock.call_args.kwargs["data"]
+        assert call_data["album_id"] == "42"
+
+    def test_omits_album_id_when_none(self, mocker):
+        mock = mocker.patch(
+            "vk_uploader.vk_api.requests.post",
+            return_value=make_ok_response({
+                "upload_url": "https://up.vk.com/v",
+                "video_id": 1,
+                "owner_id": -1,
+            }),
+        )
+        client = VkClient("tok")
+        client.video_save(
+            name="x", description="x", group_id="1",
+            publish_at=datetime.datetime(2026, 6, 1, 12, 0, 0),
+            album_id=None,
+        )
+        call_data = mock.call_args.kwargs["data"]
+        assert "album_id" not in call_data
+
+
+class TestResolveAlbum:
+    def test_noninteractive_finds_by_name(self, mocker):
+        """When album_spec is a name, find existing album by name."""
+        mocker.patch(
+            "vk_uploader.vk_api.requests.post",
+            return_value=make_ok_response({
+                "count": 1,
+                "items": [{"id": 55, "title": "My Playlist", "count": 3}],
+            }),
+        )
+        from vk_uploader.vk_api import resolve_album
+
+        console = mocker.MagicMock()
+        album_id, status = resolve_album(
+            VkClient("tok"), "12345", "My Playlist", console,
+        )
+        assert album_id == "55"
+
+    def test_noninteractive_creates_when_not_found(self, mocker):
+        """When album_spec name not found, create new album."""
+        responses = iter([
+            make_ok_response({"count": 0, "items": []}),
+            make_ok_response({"album_id": 77}),
+        ])
+        mocker.patch(
+            "vk_uploader.vk_api.requests.post",
+            side_effect=lambda *a, **kw: next(responses),
+        )
+        from vk_uploader.vk_api import resolve_album
+
+        console = mocker.MagicMock()
+        album_id, status = resolve_album(
+            VkClient("tok"), "12345", "New Album", console,
+        )
+        assert album_id == "77"
+
+    def test_interactive_cancel_returns_none(self, mocker):
+        """Interactive mode: user presses Enter with no input."""
+        mocker.patch(
+            "vk_uploader.vk_api.requests.post",
+            return_value=make_ok_response({
+                "count": 1,
+                "items": [{"id": 10, "title": "Test", "count": 1}],
+            }),
+        )
+        from vk_uploader.vk_api import resolve_album
+
+        console = mocker.MagicMock()
+        console.input.return_value = "invalid-choice"
+        album_id, status = resolve_album(
+            VkClient("tok"), "12345", "true", console,
+        )
+        assert album_id is None

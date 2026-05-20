@@ -35,6 +35,7 @@ _VALID_OVERRIDES = frozenset({
     "subtitles",
     "lang",
     "cookies_from_browser",
+    "album",
 })
 
 
@@ -139,6 +140,7 @@ def main() -> None:
 
         title_override = overrides.get("title")
         description_override = overrides.get("description")
+        album_spec = overrides.get("album")
 
         # --- Validate ---
         from vk_uploader.auth import ensure_token
@@ -171,6 +173,7 @@ def main() -> None:
             wallpost=config.defaults.wallpost,
             title_override=title_override,
             description_override=description_override,
+            album_spec=album_spec,
         )
 
         # --- Run pipeline (with bot-detection retry) ---
@@ -243,6 +246,7 @@ def _print_usage() -> None:
     print("  translation=true|false   Translate title/description (default: false)")
     print("  subtitles=true|false     Download and translate subtitles (default: false)")
     print("  lang=<code>              Target language for translation/subtitles (default: ru)")
+    print("  album=true|<name>        Add video to album (interactive or by name)")
     print("  title=<str>              Video title (default: from YouTube)")
     print("  description=<str>        Video description (default: from YouTube)")
     print()
