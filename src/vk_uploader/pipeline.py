@@ -264,15 +264,15 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
 
         from vk_uploader.thumbnail import download_thumbnail
 
-        # Build fallback chain: lang-specific → neutral → yt-dlp.
+        # Build fallback chain: lang-specific → yt-dlp → neutral.
         urls_to_try = [thumb_url]
+        if result.thumbnail_url and result.thumbnail_url not in urls_to_try:
+            urls_to_try.append(result.thumbnail_url)
         if result.video_id:
             lang = config.defaults.lang
             neutral_url = f"https://img.youtube.com/vi/{result.video_id}/maxresdefault.jpg"
-            if neutral_url != thumb_url:
+            if neutral_url not in urls_to_try:
                 urls_to_try.append(neutral_url)
-        if result.thumbnail_url and result.thumbnail_url not in urls_to_try:
-            urls_to_try.append(result.thumbnail_url)
 
         local_thumb = None
         for url in urls_to_try:
