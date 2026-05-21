@@ -210,6 +210,16 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
         else:
             console.print("  [yellow]No thumbnail URL in YouTube metadata[/yellow]")
 
+    # --- Album resolution (optional) ---
+    album_id: str | None = None
+    album_status = ""
+    if ctx.album_spec:
+        from vk_uploader.vk_api import resolve_album
+
+        album_id, album_status = resolve_album(
+            vk, ctx.group_id, ctx.album_spec, console,
+        )
+
     # video.save (without thumb_url — unsupported by VK API 5.199).
     try:
         save_response = vk.video_save(
@@ -218,6 +228,7 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
             group_id=ctx.group_id,
             publish_at=publish_at,
             wallpost=ctx.wallpost,
+            album_id=album_id,
         )
     except VkApiError as e:
         ctx.stage = PipelineStage.ERROR
@@ -280,10 +291,10 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
                 local_thumb = download_thumbnail(url, ctx.output_dir)
                 break
             except (UploadError, Exception):
-                if url == urls_to_try[-1]:
-                    raise
+                continue
 
         if local_thumb is None:
+            console.print("[yellow]Thumbnail download failed (non-fatal).[/yellow]")
             thumbnail_ok = False
         else:
             try:
@@ -294,7 +305,7 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
                 )
                 photo_id = resp.get("photo_id", "?")
                 console.print(f"[green]Thumbnail uploaded (photo_id={photo_id}).[/green]")
-            except VkApiError as e:
+            except (VkApiError, UploadError) as e:
                 console.print(f"[yellow]Thumbnail upload failed (non-fatal): {e}[/yellow]")
                 thumbnail_ok = False
             finally:
@@ -316,6 +327,8 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
         f"  Video upload:    [green]✓[/green] "
         f"(video_id: {upload_result.video_id}, owner_id: {upload_result.owner_id})"
     )
+    if album_status:
+        console.print(f"  Album:           {album_status}")
     if ctx.thumbnail_enabled:
         status = "[green]✓[/green]" if thumbnail_ok else "[red]✗[/red]"
         console.print(f"  Thumbnail:       {status}")

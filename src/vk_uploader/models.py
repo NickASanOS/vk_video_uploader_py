@@ -74,6 +74,7 @@ class JobContext:
     wallpost: bool
     title_override: str | None = None
     description_override: str | None = None
+    album_spec: str | None = None
     # Filled in during pipeline execution:
     download_result: DownloadResult | None = None
     vk_save_response: VkSaveResponse | None = None
@@ -164,3 +165,23 @@ class BotDetectionError(DownloadError):
 class UploadError(VkUploaderError):
     """VK upload failure."""
     pass
+
+
+def parse_bool(value: object, name: str = "value") -> bool:
+    """Strict bool parser for CLI and YAML inputs.
+
+    Strings: 'true'/'1'/'yes'/'on' → True, 'false'/'0'/'no'/'off' → False.
+    Bools pass through. Everything else raises UsageError.
+    """
+    if isinstance(value, bool):
+        return value
+    if not isinstance(value, str):
+        raise UsageError(f"{name} must be a boolean, got: {value!r}")
+    v = value.strip().lower()
+    if not v:
+        raise UsageError(f"{name} is empty — expected true/false")
+    if v in ("true", "1", "yes", "on"):
+        return True
+    if v in ("false", "0", "no", "off"):
+        return False
+    raise UsageError(f"{name} must be true or false, got: {value!r}")
