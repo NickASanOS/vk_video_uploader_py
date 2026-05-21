@@ -203,3 +203,23 @@ def test_yaml_null_becomes_empty_string(tmp_path: Path):
     assert config.vk.access_token == ""
     assert config.vk.group_id == ""
     assert config.vk.app_id == ""
+
+
+def test_invalid_bool_in_yaml_raises_config_error(tmp_path: Path):
+    """YAML string \"false\" is handled by parse_bool, but arbitrary strings raise ConfigError."""
+    p = tmp_path / CONFIG_FILENAME
+    p.write_text(yaml.safe_dump({"defaults": {"thumbnail": "maybe"}}))
+
+    cfg = ConfigFile(config_dir=str(tmp_path), filename=CONFIG_FILENAME)
+    with pytest.raises(ConfigError, match="must be true or false"):
+        cfg.load()
+
+
+def test_invalid_int_in_yaml_raises_config_error(tmp_path: Path):
+    """Non-numeric publish_delay_hours raises ConfigError, not ValueError traceback."""
+    p = tmp_path / CONFIG_FILENAME
+    p.write_text(yaml.safe_dump({"defaults": {"publish_delay_hours": "abc"}}))
+
+    cfg = ConfigFile(config_dir=str(tmp_path), filename=CONFIG_FILENAME)
+    with pytest.raises(ConfigError, match="Invalid value in config defaults"):
+        cfg.load()

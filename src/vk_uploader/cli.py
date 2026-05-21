@@ -12,10 +12,12 @@ from vk_uploader.logging_setup import create_console
 from vk_uploader.models import (
     AuthError,
     BotDetectionError,
+    ConfigError,
     DownloadError,
     JobContext,
     PipelineStage,
     UsageError,
+    parse_bool,
 )
 from vk_uploader.pipeline import run_pipeline
 from vk_uploader.vk_api import VkApiError
@@ -108,12 +110,26 @@ def main() -> None:
         config_file = ConfigFile()
         config = config_file.load()
 
-        # --- Merge CLI overrides onto config ---
+        # --- Auth (may reload config — apply overrides AFTER) ---
+        from vk_uploader.auth import ensure_token
+
+        old_token = config.vk.access_token
+        ensure_token(console, config_file, config)
+        # Only reload if the token was changed (avoids wiping CLI overrides).
+        if config.vk.access_token != old_token:
+            config = config_file.load()
+
+        # --- Merge CLI overrides onto config (after potential reload) ---
         if "thumbnail" in overrides:
-            config.defaults.thumbnail = _parse_bool(overrides["thumbnail"], "thumbnail")
+            config.defaults.thumbnail = parse_bool(overrides["thumbnail"], "thumbnail")
         if "publish_delay_hours" in overrides:
             try:
-                config.defaults.publish_delay_hours = int(overrides["publish_delay_hours"])
+                val = int(overrides["publish_delay_hours"])
+                if val < 0:
+                    raise UsageError(
+                        f"publish_delay_hours must be >= 0, got: {val}"
+                    )
+                config.defaults.publish_delay_hours = val
             except ValueError:
                 raise UsageError(
                     f"publish_delay_hours must be an integer, "
@@ -126,13 +142,13 @@ def main() -> None:
         if "group_id" in overrides:
             config.vk.group_id = overrides["group_id"]
         if "wallpost" in overrides:
-            config.defaults.wallpost = _parse_bool(overrides["wallpost"], "wallpost")
+            config.defaults.wallpost = parse_bool(overrides["wallpost"], "wallpost")
         if "video_format" in overrides:
             config.download.video_format = overrides["video_format"]
         if "translation" in overrides:
-            config.defaults.translation = _parse_bool(overrides["translation"], "translation")
+            config.defaults.translation = parse_bool(overrides["translation"], "translation")
         if "subtitles" in overrides:
-            config.defaults.subtitles = _parse_bool(overrides["subtitles"], "subtitles")
+            config.defaults.subtitles = parse_bool(overrides["subtitles"], "subtitles")
         if "lang" in overrides:
             config.defaults.lang = overrides["lang"]
         if "cookies_from_browser" in overrides:
@@ -143,13 +159,6 @@ def main() -> None:
         album_spec = overrides.get("album")
 
         # --- Validate ---
-        from vk_uploader.auth import ensure_token
-
-        old_token = config.vk.access_token
-        ensure_token(console, config_file, config)
-        # Only reload if the token was changed (avoids wiping CLI overrides).
-        if config.vk.access_token != old_token:
-            config = config_file.load()
         token = config.vk.access_token.strip()
         if not token:
             console.print("[red]VK access token is required.[/red]")
@@ -202,6 +211,9 @@ def main() -> None:
     except UsageError as e:
         console.print(f"[red]{e}[/red]")
         sys.exit(2)
+    except ConfigError as e:
+        console.print(f"[red]Config error: {e}[/red]")
+        sys.exit(1)
     except AuthError as e:
         console.print(f"[red]{e}[/red]")
         sys.exit(1)
@@ -218,15 +230,6 @@ def main() -> None:
     except Exception:
         console.print_exception()
         sys.exit(1)
-
-
-def _parse_bool(value: str, name: str) -> bool:
-    v = value.lower()
-    if v in ("true", "1", "yes", "on"):
-        return True
-    if v in ("false", "0", "no", "off"):
-        return False
-    raise UsageError(f"{name} must be true or false, got: {value!r}")
 
 
 def _print_usage() -> None:

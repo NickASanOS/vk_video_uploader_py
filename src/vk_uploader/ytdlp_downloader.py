@@ -63,11 +63,14 @@ def _find_ytdlp() -> str:
     candidates = [
         os.path.expanduser("~/.local/bin/yt-dlp"),
         "/usr/local/bin/yt-dlp",
-        "yt-dlp",
     ]
     for c in candidates:
-        if Path(c).exists() or c == "yt-dlp":
+        if Path(c).exists():
             return c
+    # Fall back to PATH lookup.
+    found = shutil.which("yt-dlp")
+    if found:
+        return found
     raise DownloadError(
         "yt-dlp binary not found. Install it:\n"
         "  curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \\\n"
@@ -123,7 +126,7 @@ class YtDlpDownloader:
     def download(self, url: str) -> DownloadResult:
         """Download a YouTube video and return a DownloadResult with metadata."""
         self._output_dir.mkdir(parents=True, exist_ok=True)
-        out_tpl = str(self._output_dir / "%(title)s.%(ext)s")
+        out_tpl = str(self._output_dir / "%(id)s.%(ext)s")
 
         # 1. Extract metadata (no download).
         info = self._extract_info(url)
@@ -133,10 +136,11 @@ class YtDlpDownloader:
         thumbnail_url = info.get("thumbnail")
         duration = int(str(info.get("duration", 0)))
         uploader = str(info.get("uploader", ""))
+        video_id = str(info.get("id", _extract_youtube_id(url) or "unknown"))
 
         # 2. Check if the merged file already exists (skip re-download).
         for ext in (".mp4", ".mkv", ".webm"):
-            candidate = self._output_dir / f"{title}{ext}"
+            candidate = self._output_dir / f"{video_id}{ext}"
             if candidate.exists() and candidate.stat().st_size > 0:
                 self._log(f"Skipping download — file exists: {candidate}")
                 return DownloadResult(
@@ -147,7 +151,7 @@ class YtDlpDownloader:
                     duration=duration,
                     uploader=uploader,
                     webpage_url=url,
-                    video_id=_extract_youtube_id(url),
+                    video_id=video_id,
                 )
 
         # 3. Download.
@@ -185,7 +189,7 @@ class YtDlpDownloader:
             proc = subprocess.Popen(
                 args,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
                 env=env,
@@ -200,24 +204,19 @@ class YtDlpDownloader:
             if self._on_progress:
                 self._on_progress({"line": line})
 
-        # Collect stderr for error reporting.
-        assert proc.stderr is not None
-        stderr_lines = [line.rstrip("\n") for line in proc.stderr]
-        for line in stderr_lines:
-            self._log(line)
-
         exit_code = proc.wait()
         if exit_code != 0:
             # yt-dlp may have created the merged file despite a non-fatal
             # post-processing error (e.g. renaming a leftover .part file).
-            merged_path = self._output_dir / f"{title}.mp4"
+            merged_path = self._output_dir / f"{video_id}.mp4"
             if not merged_path.exists() or merged_path.stat().st_size == 0:
-                detail = "\n".join(stderr_lines[-5:]) if stderr_lines else "no output"
-                raise DownloadError(f"yt-dlp exited with code {exit_code}:\n{detail}")
+                raise DownloadError(
+                    f"yt-dlp exited with code {exit_code}"
+                )
             self._log(f"yt-dlp exited with code {exit_code} but merged file exists, continuing")
 
         # 3. Find the downloaded file.
-        merged_path = self._output_dir / f"{title}.mp4"
+        merged_path = self._output_dir / f"{video_id}.mp4"
         if merged_path.exists() and merged_path.stat().st_size > 0:
             return DownloadResult(
                 file_path=merged_path,
@@ -250,7 +249,7 @@ class YtDlpDownloader:
             duration=duration,
             uploader=uploader,
             webpage_url=url,
-            video_id=_extract_youtube_id(url),
+            video_id=video_id,
         )
 
     def _extract_info(self, url: str) -> dict[str, Any]:

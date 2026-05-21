@@ -99,9 +99,15 @@ vk_uploader <url> thumbnail=false publish_delay_hours=48 output_dir=/tmp/videos
 | `group_id=` | str | — | VK community ID |
 | `wallpost=` | bool | `false` | Publish to community wall |
 | `translation=` | bool | `false` | Translate title/description |
-| `lang=` | str | `ru` | Target language for translation |
+| `lang=` | str | `ru` | Target language for translation/subtitles |
+| `subtitles=` | bool | `false` | Download and translate subtitles (saved locally, not uploaded to VK) |
+| `album=` | str | — | Add video to album: `true` (interactive) or album name |
+| `cookies_from_browser=` | str | — | Browser to extract cookies from (firefox, chrome, ...) |
 | `title=` | str | — | Video title (default: from YouTube) |
 | `description=` | str | — | Video description (default: from YouTube) |
+
+Subtitles are downloaded as `.srt` files and translated to the target language,
+but are **not uploaded to VK** (VK API does not support SRT subtitle upload).
 
 ## Config file
 
@@ -120,7 +126,9 @@ defaults:
   thumbnail: true
   wallpost: false
   translation: false
+  subtitles: false
   lang: ru
+  cookies_from_browser: ""
 
 download:
   output_dir: "~/Downloads"

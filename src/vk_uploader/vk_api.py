@@ -55,9 +55,14 @@ class VkClient:
         url = f"https://api.vk.com/method/{method}"
         body = {**params, "access_token": self._token, "v": self._version}
 
-        resp = requests.post(url, data=body, timeout=60)
-        resp.raise_for_status()
-        data: dict[str, Any] = resp.json()
+        try:
+            resp = requests.post(url, data=body, timeout=60)
+            resp.raise_for_status()
+            data: dict[str, Any] = resp.json()
+        except requests.RequestException as e:
+            raise VkApiError(code=-1, message=f"Network error calling {method}: {e}") from e
+        except ValueError as e:
+            raise VkApiError(code=-1, message=f"Invalid JSON from {method}: {e}") from e
 
         if "error" in data:
             err = data["error"]
@@ -172,14 +177,17 @@ class VkClient:
                         headers={"Content-Type": encoder.content_type},
                         timeout=600,
                     )
+                resp.raise_for_status()
+                data: dict[str, Any] = resp.json()
             except requests.RequestException as e:
                 raise UploadError(
                     f"Network error during upload: {e}. "
                     f"VK upload servers can be unstable with large files — try again."
                 ) from e
-
-        resp.raise_for_status()
-        data: dict[str, Any] = resp.json()
+            except ValueError as e:
+                raise UploadError(
+                    f"Invalid JSON from VK upload server: {e}"
+                ) from e
 
         if "error" in data:
             err = data["error"]
@@ -221,13 +229,22 @@ class VkClient:
 
         # 2. Upload the image.
         with open(thumbnail_path, "rb") as f:
-            upload_resp = requests.post(
-                upload_url,
-                files={"file": (thumbnail_path.name, f, "image/jpeg")},
-                timeout=60,
-            )
-        upload_resp.raise_for_status()
-        upload_data: dict[str, Any] = upload_resp.json()
+            try:
+                upload_resp = requests.post(
+                    upload_url,
+                    files={"file": (thumbnail_path.name, f, "image/jpeg")},
+                    timeout=60,
+                )
+                upload_resp.raise_for_status()
+                upload_data: dict[str, Any] = upload_resp.json()
+            except requests.RequestException as e:
+                raise UploadError(
+                    f"Network error uploading thumbnail: {e}"
+                ) from e
+            except ValueError as e:
+                raise UploadError(
+                    f"Invalid JSON from thumbnail upload: {e}"
+                ) from e
 
         if "error" in upload_data:
             err = upload_data["error"]

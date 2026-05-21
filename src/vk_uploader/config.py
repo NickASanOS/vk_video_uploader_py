@@ -10,7 +10,15 @@ from typing import Any
 
 import yaml
 
-from vk_uploader.models import AppConfig, ConfigError, DefaultsConfig, DownloadConfig, VkConfig
+from vk_uploader.models import (
+    AppConfig,
+    ConfigError,
+    DefaultsConfig,
+    DownloadConfig,
+    UsageError,
+    VkConfig,
+    parse_bool,
+)
 
 CONFIG_DIR = "~/.config/vk_uploader"
 CONFIG_FILENAME = "config.yaml"
@@ -97,15 +105,23 @@ class ConfigFile:
             expires_at=vk_data.get("expires_at"),
             user_id=vk_data.get("user_id"),
         )
-        defaults = DefaultsConfig(
-            publish_delay_hours=int(defaults_data.get("publish_delay_hours", 24)),
-            thumbnail=bool(defaults_data.get("thumbnail", True)),
-            wallpost=bool(defaults_data.get("wallpost", False)),
-            translation=bool(defaults_data.get("translation", False)),
-            subtitles=bool(defaults_data.get("subtitles", False)),
-            lang=str(defaults_data.get("lang", "ru")),
-            cookies_from_browser=str(defaults_data.get("cookies_from_browser", "")),
-        )
+        try:
+            d = defaults_data
+            defaults = DefaultsConfig(
+                publish_delay_hours=int(d.get("publish_delay_hours", 24)),
+                thumbnail=parse_bool(d.get("thumbnail", True), "defaults.thumbnail"),
+                wallpost=parse_bool(d.get("wallpost", False), "defaults.wallpost"),
+                translation=parse_bool(d.get("translation", False), "defaults.translation"),
+                subtitles=parse_bool(d.get("subtitles", False), "defaults.subtitles"),
+                lang=str(d.get("lang", "ru")),
+                cookies_from_browser=str(d.get("cookies_from_browser", "")),
+            )
+        except UsageError as e:
+            raise ConfigError(str(e)) from e
+        except ValueError as e:
+            raise ConfigError(
+                f"Invalid value in config defaults: {e}"
+            ) from e
         download = DownloadConfig(
             output_dir=str(download_data.get("output_dir", "~/Downloads")),
             video_format=str(download_data.get("video_format", "bv*+ba/b")),

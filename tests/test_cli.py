@@ -7,8 +7,8 @@ from unittest import mock
 
 import pytest
 
-from vk_uploader.cli import _parse_bool, main, parse_args
-from vk_uploader.models import UsageError
+from vk_uploader.cli import main, parse_args
+from vk_uploader.models import UsageError, parse_bool
 
 
 class TestParseArgs:
@@ -79,20 +79,20 @@ class TestParseArgs:
 
 class TestParseBool:
     def test_true_values(self):
-        assert _parse_bool("true", "x") is True
-        assert _parse_bool("1", "x") is True
-        assert _parse_bool("yes", "x") is True
-        assert _parse_bool("on", "x") is True
+        assert parse_bool("true", "x") is True
+        assert parse_bool("1", "x") is True
+        assert parse_bool("yes", "x") is True
+        assert parse_bool("on", "x") is True
 
     def test_false_values(self):
-        assert _parse_bool("false", "x") is False
-        assert _parse_bool("0", "x") is False
-        assert _parse_bool("no", "x") is False
-        assert _parse_bool("off", "x") is False
+        assert parse_bool("false", "x") is False
+        assert parse_bool("0", "x") is False
+        assert parse_bool("no", "x") is False
+        assert parse_bool("off", "x") is False
 
     def test_invalid_raises(self):
         with pytest.raises(UsageError):
-            _parse_bool("maybe", "myflag")
+            parse_bool("maybe", "myflag")
 
 
 class TestMain:

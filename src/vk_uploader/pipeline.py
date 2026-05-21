@@ -291,10 +291,10 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
                 local_thumb = download_thumbnail(url, ctx.output_dir)
                 break
             except (UploadError, Exception):
-                if url == urls_to_try[-1]:
-                    raise
+                continue
 
         if local_thumb is None:
+            console.print("[yellow]Thumbnail download failed (non-fatal).[/yellow]")
             thumbnail_ok = False
         else:
             try:
@@ -305,7 +305,7 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
                 )
                 photo_id = resp.get("photo_id", "?")
                 console.print(f"[green]Thumbnail uploaded (photo_id={photo_id}).[/green]")
-            except VkApiError as e:
+            except (VkApiError, UploadError) as e:
                 console.print(f"[yellow]Thumbnail upload failed (non-fatal): {e}[/yellow]")
                 thumbnail_ok = False
             finally:
