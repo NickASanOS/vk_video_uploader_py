@@ -10,13 +10,20 @@ import pytest
 from vk_uploader.ytdlp_downloader import YtDlpDownloader, _find_ytdlp
 
 
-def test_find_ytdlp_finds_bundled_binary():
+def test_find_ytdlp_finds_path_binary(mocker):
+    mocker.patch("vk_uploader.ytdlp_downloader.Path.exists", return_value=False)
+    mocker.patch("vk_uploader.ytdlp_downloader.shutil.which", return_value="/usr/bin/yt-dlp")
+
     path = _find_ytdlp()
-    assert path
-    assert "yt-dlp" in path
+
+    assert path == "/usr/bin/yt-dlp"
 
 
 class TestYtDlpDownloader:
+    @pytest.fixture(autouse=True)
+    def mock_ytdlp_binary(self, mocker):
+        mocker.patch("vk_uploader.ytdlp_downloader._find_ytdlp", return_value="yt-dlp")
+
     def test_download_returns_result(self, mocker, tmp_path: Path):
         info = {
             "title": "Test Video",
