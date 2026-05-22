@@ -60,21 +60,22 @@ ln -s $(pwd)/.venv/bin/vk_uploader ~/.local/bin/vk_uploader
 Go to [dev.vk.com/en/admin/create-app](https://dev.vk.com/en/admin/create-app), create a **Standalone** application.  
 Note your **App ID**.
 
-### 2. First run — authorize
+### 2. Run setup wizard
 
 ```bash
-vk_uploader https://www.youtube.com/watch?v=YOUR_VIDEO
+vk_uploader setup
 ```
 
-- Browser opens with VK authorization page
-- Log in and allow access
-- Copy the full URL from the address bar (`https://oauth.vk.com/blank.html#access_token=...`)
-- Paste it into the terminal
-- Token is saved to `~/.config/vk_uploader/config.yaml`
+The wizard will guide you through:
+- **App ID** — your VK application ID
+- **OAuth authorization** — opens browser, you log in and paste the redirect URL
+- **Group ID** — your VK community ID (find it in any post URL: `wall-123456789_...`)
+- **Token verification** — validates the token against VK API
+- **Browser cookies** (optional) — detects installed browsers, helps avoid YouTube bot detection
 
-### 3. Next runs
+All values are saved to `~/.config/vk_uploader/config.yaml`.
 
-Token is saved — no need to re-authorize. Just pass a YouTube URL:
+### 3. Upload a video
 
 ```bash
 vk_uploader https://www.youtube.com/watch?v=YOUR_VIDEO
@@ -99,12 +100,15 @@ vk_uploader <url> thumbnail=false publish_delay_hours=48 output_dir=/tmp/videos
 | `group_id=` | str | — | VK community ID |
 | `wallpost=` | bool | `false` | Publish to community wall |
 | `translation=` | bool | `false` | Translate title/description |
-| `lang=` | str | `ru` | Target language for translation/subtitles |
+| `lang=` | str | — | Target language — **required** when `translation=true` or `subtitles=true` |
 | `subtitles=` | bool | `false` | Download and translate subtitles (saved locally, not uploaded to VK) |
 | `album=` | str | — | Add video to album: `true` (interactive) or album name |
 | `cookies_from_browser=` | str | — | Browser to extract cookies from (firefox, chrome, ...) |
 | `title=` | str | — | Video title (default: from YouTube) |
 | `description=` | str | — | Video description (default: from YouTube) |
+
+If `translation=true` or `subtitles=true` is set, `lang=<code>` must also be provided
+(e.g. `lang=ru`, `lang=en`). The tool will exit with an error if `lang` is missing.
 
 Subtitles are downloaded as `.srt` files and translated to the target language,
 but are **not uploaded to VK** (VK API does not support SRT subtitle upload).
@@ -127,8 +131,8 @@ defaults:
   wallpost: false
   translation: false
   subtitles: false
-  lang: ru
-  cookies_from_browser: ""
+  lang: ""           # required when translation or subtitles is true
+  cookies_from_browser: ""  # e.g. "firefox", "chrome"
 
 download:
   output_dir: "~/Downloads"

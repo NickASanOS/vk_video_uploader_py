@@ -113,7 +113,7 @@ class ConfigFile:
                 wallpost=parse_bool(d.get("wallpost", False), "defaults.wallpost"),
                 translation=parse_bool(d.get("translation", False), "defaults.translation"),
                 subtitles=parse_bool(d.get("subtitles", False), "defaults.subtitles"),
-                lang=str(d.get("lang", "ru")),
+                lang=str(d.get("lang", "")),
                 cookies_from_browser=str(d.get("cookies_from_browser", "")),
             )
         except UsageError as e:

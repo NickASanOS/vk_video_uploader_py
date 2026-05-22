@@ -103,7 +103,7 @@ class DefaultsConfig:
     wallpost: bool = False
     translation: bool = False
     subtitles: bool = False
-    lang: str = "ru"
+    lang: str = ""
     cookies_from_browser: str = ""
 
 

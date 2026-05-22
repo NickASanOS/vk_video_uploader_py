@@ -106,8 +106,7 @@ class TestYtDlpDownloader:
         assert "--sub-langs" in args
         assert "--convert-subs" in args
         idx = args.index("--sub-langs")
-        assert "ru" in args[idx + 1]
-        assert "en" in args[idx + 1]
+        assert args[idx + 1] == "ru"
 
     def test_subtitles_args_absent_when_lang_none(self, mocker, tmp_path: Path):
         info = {"title": "V", "description": "", "duration": 0, "uploader": ""}

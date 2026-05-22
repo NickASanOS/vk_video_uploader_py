@@ -87,7 +87,7 @@ def run_oauth_flow(app_id: str) -> AuthResult:
 
 
 def ensure_token(console: Console, config_file: ConfigFile, config: AppConfig) -> None:
-    """Check token validity; if missing or expired, run OAuth flow and save."""
+    """Check token validity; if missing, expired, or invalid, run OAuth flow and save."""
     from datetime import datetime
 
     token = config.vk.access_token.strip()
@@ -105,6 +105,15 @@ def ensure_token(console: Console, config_file: ConfigFile, config: AppConfig) -
                     token = ""
             except (ValueError, TypeError):
                 pass
+
+    if token:
+        # Verify token is actually valid with a lightweight API call.
+        console.print("[dim]Verifying VK token...[/dim]")
+        if not _verify_token(token):
+            console.print("[yellow]Token is invalid, re-authorizing...[/yellow]")
+            token = ""
+            config.vk.access_token = ""
+            config_file.save(config)
 
     if not token:
         app_id = config.vk.app_id.strip()
@@ -130,3 +139,39 @@ def ensure_token(console: Console, config_file: ConfigFile, config: AppConfig) -
         config.vk.user_id = result.user_id
         config_file.save(config)
         console.print("[green]Token saved to config.[/green]")
+
+    # --- Group ID ---
+    group_id = config.vk.group_id.strip()
+    if not group_id:
+        console.print(
+            "\nVK Group ID is required. You can find it in any community post URL:\n"
+            "  wall-123456789_...  →  group_id is 123456789"
+        )
+        group_id = console.input("Enter your VK Group ID: ").strip()
+        if not group_id:
+            raise AuthError("VK Group ID is required.")
+        config.vk.group_id = group_id
+        config_file.save(config)
+        console.print("[green]Group ID saved to config.[/green]")
+
+
+def _verify_token(token: str) -> bool:
+    """Check whether a VK access token is still valid via users.get."""
+    import requests
+
+    try:
+        resp = requests.post(
+            "https://api.vk.com/method/users.get",
+            data={"access_token": token, "v": "5.199"},
+            timeout=10,
+        )
+        data: dict[str, object] = resp.json()
+        if "error" in data:
+            err: dict[str, object] = data["error"]  # type: ignore[assignment]
+            code = err.get("error_code", -1)
+            # 5 = user authorization failed (bad token)
+            return int(code) != 5  # type: ignore[arg-type]
+        return "response" in data
+    except Exception:
+        # Network error — don't invalidate the token, let the main flow handle it.
+        return True

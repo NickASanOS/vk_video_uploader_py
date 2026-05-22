@@ -6,10 +6,12 @@ import sys
 from pathlib import Path
 
 from rich.console import Console
+from rich.table import Table
 
 from vk_uploader.config import ConfigFile
 from vk_uploader.logging_setup import create_console
 from vk_uploader.models import (
+    AppConfig,
     AuthError,
     BotDetectionError,
     ConfigError,
@@ -105,6 +107,11 @@ def main() -> None:
             _print_usage()
             sys.exit(0)
 
+        # --- Dispatch: setup command ---
+        if args[0] == "setup":
+            cmd_setup(console)
+            return
+
         url, overrides = parse_args(args)
 
         config_file = ConfigFile()
@@ -120,55 +127,13 @@ def main() -> None:
             config = config_file.load()
 
         # --- Merge CLI overrides onto config (after potential reload) ---
-        if "thumbnail" in overrides:
-            config.defaults.thumbnail = parse_bool(overrides["thumbnail"], "thumbnail")
-        if "publish_delay_hours" in overrides:
-            try:
-                val = int(overrides["publish_delay_hours"])
-                if val < 0:
-                    raise UsageError(
-                        f"publish_delay_hours must be >= 0, got: {val}"
-                    )
-                config.defaults.publish_delay_hours = val
-            except ValueError:
-                raise UsageError(
-                    f"publish_delay_hours must be an integer, "
-                    f"got: {overrides['publish_delay_hours']!r}"
-                ) from None
-        if "output_dir" in overrides:
-            config.download.output_dir = overrides["output_dir"]
-        if "token" in overrides:
-            config.vk.access_token = overrides["token"]
-        if "group_id" in overrides:
-            config.vk.group_id = overrides["group_id"]
-        if "wallpost" in overrides:
-            config.defaults.wallpost = parse_bool(overrides["wallpost"], "wallpost")
-        if "video_format" in overrides:
-            config.download.video_format = overrides["video_format"]
-        if "translation" in overrides:
-            config.defaults.translation = parse_bool(overrides["translation"], "translation")
-        if "subtitles" in overrides:
-            config.defaults.subtitles = parse_bool(overrides["subtitles"], "subtitles")
-        if "lang" in overrides:
-            config.defaults.lang = overrides["lang"]
-        if "cookies_from_browser" in overrides:
-            config.defaults.cookies_from_browser = overrides["cookies_from_browser"]
-
+        _apply_overrides(config, overrides)
         title_override = overrides.get("title")
         description_override = overrides.get("description")
         album_spec = overrides.get("album")
 
         # --- Validate ---
-        token = config.vk.access_token.strip()
-        if not token:
-            console.print("[red]VK access token is required.[/red]")
-            console.print("Run vk_uploader without arguments to configure.")
-            sys.exit(1)
-
-        group_id = config.vk.group_id.strip()
-        if not group_id:
-            console.print("[red]VK group_id is required in config.[/red]")
-            sys.exit(1)
+        _validate_config(console, config)
 
         output_dir = config_file.resolve_output_dir(config)
 
@@ -176,7 +141,7 @@ def main() -> None:
         ctx = JobContext(
             youtube_url=url,
             output_dir=output_dir,
-            group_id=group_id,
+            group_id=config.vk.group_id,
             publish_delay_hours=config.defaults.publish_delay_hours,
             thumbnail_enabled=config.defaults.thumbnail,
             wallpost=config.defaults.wallpost,
@@ -232,10 +197,183 @@ def main() -> None:
         sys.exit(1)
 
 
+# ── setup command ────────────────────────────────────────────────────────────
+
+
+def cmd_setup(console: Console) -> None:
+    """Interactive configuration wizard.
+
+    Checks all required config values, prompts for missing ones,
+    validates the token against VK API, and prints a summary.
+    """
+    from vk_uploader.auth import ensure_token
+
+    config_file = ConfigFile()
+    config = config_file.load()
+
+    console.print()
+    console.print("[bold]── VK Uploader Setup ──[/bold]")
+    console.print()
+
+    # Fill in missing auth values (app_id, token, group_id).
+    ensure_token(console, config_file, config)
+
+    # Reload to get the latest saved state.
+    config = config_file.load()
+
+    # Verify token.
+    console.print()
+    console.print("[dim]Verifying token...[/dim]", end=" ")
+    from vk_uploader.auth import _verify_token
+    if _verify_token(config.vk.access_token):
+        console.print("[green]✓[/green]")
+    else:
+        console.print("[red]✗ (token invalid — re-run setup)[/red]")
+        sys.exit(1)
+
+    # --- Browser cookies (optional, helps avoid YouTube bot detection) ---
+    if not config.defaults.cookies_from_browser:
+        console.print()
+        available = _detect_browsers()
+        if available:
+            console.print(
+                f"[dim]Detected browsers: [bold]{', '.join(available)}[/bold][/dim]"
+            )
+            console.print(
+                "[dim]Set cookies_from_browser to avoid YouTube bot detection.[/dim]"
+            )
+            choice = console.input(
+                f"Browser name (or Enter to skip) [{available[0]}]: "
+            ).strip().lower()
+            if not choice:
+                pass  # skip
+            elif choice in _BROWSER_DIRS:
+                config.defaults.cookies_from_browser = choice
+                config_file.save(config)
+                console.print(f"[green]cookies_from_browser={choice} saved.[/green]")
+            else:
+                console.print(f"[yellow]Unknown browser '{choice}' — skipped.[/yellow]")
+        else:
+            console.print(
+                "[dim]No browsers detected. Set cookies_from_browser=<name> to avoid"
+                " YouTube bot detection.[/dim]"
+            )
+
+    # ── Print summary ──
+    console.print()
+    console.print("[bold]Configuration summary:[/bold]")
+    console.print()
+
+    table = Table(show_header=False, padding=(0, 2))
+    table.add_column(style="dim")
+    table.add_column()
+
+    def _row(label: str, value: str) -> None:
+        table.add_row(label, value)
+
+    _row("App ID", config.vk.app_id or "[red](not set)[/red]")
+    token_display = config.vk.access_token[:12] + "..." if config.vk.access_token else "[red](not set)[/red]"
+    _row("Token", f"[green]{token_display}[/green]" if config.vk.access_token else token_display)
+    _row("Group ID", config.vk.group_id or "[red](not set)[/red]")
+    _row("Expires", config.vk.expires_at or "(never)")
+    _row("User ID", config.vk.user_id or "(unknown)")
+    console.print(table)
+
+    console.print()
+    console.print("[dim]Defaults:[/dim]")
+    table2 = Table(show_header=False, padding=(0, 2))
+    table2.add_column(style="dim")
+    table2.add_column()
+    table2.add_row("Output dir", config.download.output_dir)
+    table2.add_row("Publish delay", f"{config.defaults.publish_delay_hours}h")
+    table2.add_row("Thumbnail", "[green]on[/green]" if config.defaults.thumbnail else "[dim]off[/dim]")
+    table2.add_row("Wall post", "[green]on[/green]" if config.defaults.wallpost else "[dim]off[/dim]")
+    table2.add_row("Subtitles", f"[green]on[/green] → {config.defaults.lang}" if config.defaults.subtitles else "[dim]off[/dim]")
+    table2.add_row("Translation", f"[green]on[/green] → {config.defaults.lang}" if config.defaults.translation else "[dim]off[/dim]")
+    table2.add_row("Language", config.defaults.lang or "(not set)")
+    table2.add_row("Cookies", config.defaults.cookies_from_browser or "(none)")
+    console.print(table2)
+
+    console.print()
+    console.print(f"[dim]Config file: {config_file.path}[/dim]")
+    console.print()
+    console.print("[green]Setup complete. Run: vk_uploader <youtube_url> [key=value ...][/green]")
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+
+def _apply_overrides(config: AppConfig, overrides: dict[str, str]) -> None:
+    """Merge CLI key=value overrides onto config in-place."""
+    if "thumbnail" in overrides:
+        config.defaults.thumbnail = parse_bool(overrides["thumbnail"], "thumbnail")
+    if "publish_delay_hours" in overrides:
+        try:
+            val = int(overrides["publish_delay_hours"])
+            if val < 0:
+                raise UsageError(f"publish_delay_hours must be >= 0, got: {val}")
+            config.defaults.publish_delay_hours = val
+        except ValueError:
+            raise UsageError(
+                f"publish_delay_hours must be an integer, "
+                f"got: {overrides['publish_delay_hours']!r}"
+            ) from None
+    if "output_dir" in overrides:
+        config.download.output_dir = overrides["output_dir"]
+    if "token" in overrides:
+        config.vk.access_token = overrides["token"]
+    if "group_id" in overrides:
+        config.vk.group_id = overrides["group_id"]
+    if "wallpost" in overrides:
+        config.defaults.wallpost = parse_bool(overrides["wallpost"], "wallpost")
+    if "video_format" in overrides:
+        config.download.video_format = overrides["video_format"]
+    if "translation" in overrides:
+        config.defaults.translation = parse_bool(overrides["translation"], "translation")
+    if "subtitles" in overrides:
+        config.defaults.subtitles = parse_bool(overrides["subtitles"], "subtitles")
+    if "lang" in overrides:
+        config.defaults.lang = overrides["lang"]
+    if "cookies_from_browser" in overrides:
+        config.defaults.cookies_from_browser = overrides["cookies_from_browser"]
+
+
+def _validate_config(console: Console, config: AppConfig) -> None:
+    """Validate required config values; print error and exit if missing."""
+    token = config.vk.access_token.strip()
+    if not token:
+        console.print("[red]VK access token is required.[/red]")
+        console.print("Run [bold]vk_uploader setup[/bold] to configure.")
+        sys.exit(1)
+
+    group_id = config.vk.group_id.strip()
+    if not group_id:
+        console.print("[red]VK Group ID is required.[/red]")
+        console.print("Run [bold]vk_uploader setup[/bold] to configure.")
+        sys.exit(1)
+
+    if config.defaults.subtitles or config.defaults.translation:
+        lang = config.defaults.lang.strip()
+        if not lang:
+            console.print(
+                "[red]lang is required when subtitles=true or translation=true.[/red]"
+            )
+            console.print(
+                "Pass lang=<code> to specify the target language"
+                " (e.g. lang=ru, lang=en)."
+            )
+            sys.exit(1)
+
+
+# ── usage ─────────────────────────────────────────────────────────────────────
+
+
 def _print_usage() -> None:
     print("vk_uploader — upload YouTube videos to VK")
     print()
-    print("Usage: vk_uploader <youtube_url> [key=value ...]")
+    print("Usage:")
+    print("  vk_uploader setup               Interactive configuration wizard")
+    print("  vk_uploader <youtube_url> [key=value ...]")
     print()
     print("Supported options:")
     print("  ylink=<url>              YouTube video URL (alternative to positional)")
@@ -248,7 +386,7 @@ def _print_usage() -> None:
     print("  wallpost=true|false      Publish to community wall (default: false)")
     print("  translation=true|false   Translate title/description (default: false)")
     print("  subtitles=true|false     Download and translate subtitles (default: false)")
-    print("  lang=<code>              Target language for translation/subtitles (default: ru)")
+    print("  lang=<code>              Target language for translation/subtitles")
     print("  album=true|<name>        Add video to album (interactive or by name)")
     print("  title=<str>              Video title (default: from YouTube)")
     print("  description=<str>        Video description (default: from YouTube)")
@@ -259,6 +397,9 @@ def _print_usage() -> None:
     print("  firefox, chrome, chromium, brave, edge, opera, vivaldi")
     print()
     print("Use cookies_from_browser=<browser> to avoid YouTube bot detection.")
+
+
+# ── browser helpers ───────────────────────────────────────────────────────────
 
 
 _BROWSER_DIRS: dict[str, list[str]] = {

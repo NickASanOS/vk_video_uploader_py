@@ -169,7 +169,7 @@ class YtDlpDownloader:
             args += [
                 "--write-subs",
                 "--write-auto-subs",
-                "--sub-langs", f"{self._subtitles_lang},en.*",
+                "--sub-langs", self._subtitles_lang,
                 "--convert-subs", "srt",
             ]
         if self._cookies_from_browser:

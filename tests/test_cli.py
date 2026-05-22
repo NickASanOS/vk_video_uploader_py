@@ -7,7 +7,7 @@ from unittest import mock
 
 import pytest
 
-from vk_uploader.cli import main, parse_args
+from vk_uploader.cli import main, parse_args, cmd_setup
 from vk_uploader.models import UsageError, parse_bool
 
 
@@ -102,6 +102,14 @@ class TestMain:
                 main()
             assert exc.value.code == 0
 
+    def test_setup_dispatches(self, mocker):
+        """vk_uploader setup → calls cmd_setup."""
+        mocker.patch.object(sys, "argv", ["vk_uploader", "setup"])
+        mocker.patch("vk_uploader.cli.create_console")
+        mock_setup = mocker.patch("vk_uploader.cli.cmd_setup")
+        main()
+        mock_setup.assert_called_once()
+
     def test_usage_error_exit_code_2(self, mocker):
         mocker.patch.object(
             sys, "argv", ["vk_uploader", "thumbnail=false"]
@@ -110,3 +118,137 @@ class TestMain:
         with pytest.raises(SystemExit) as exc:
             main()
         assert exc.value.code == 2
+
+    def test_subtitles_true_without_lang_exits(self, mocker):
+        """subtitles=true without lang → error."""
+        from vk_uploader.models import AppConfig, VkConfig, DefaultsConfig, DownloadConfig
+
+        config = AppConfig(
+            vk=VkConfig(access_token="tok", group_id="456", app_id="123"),
+            defaults=DefaultsConfig(subtitles=True, lang=""),
+            download=DownloadConfig(),
+        )
+
+        mocker.patch.object(sys, "argv", ["vk_uploader", "https://youtube.com/watch?v=abc"])
+        mocker.patch("vk_uploader.cli.create_console")
+        mock_cf = mocker.MagicMock()
+        mock_cf.load.return_value = config
+        mocker.patch("vk_uploader.cli.ConfigFile", return_value=mock_cf)
+        mocker.patch("vk_uploader.auth.ensure_token")
+
+        with pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 1
+
+    def test_translation_true_without_lang_exits(self, mocker):
+        """translation=true without lang → error."""
+        from vk_uploader.models import AppConfig, VkConfig, DefaultsConfig, DownloadConfig
+
+        config = AppConfig(
+            vk=VkConfig(access_token="tok", group_id="456", app_id="123"),
+            defaults=DefaultsConfig(translation=True, lang=""),
+            download=DownloadConfig(),
+        )
+
+        mocker.patch.object(sys, "argv", ["vk_uploader", "https://youtube.com/watch?v=abc"])
+        mocker.patch("vk_uploader.cli.create_console")
+        mock_cf = mocker.MagicMock()
+        mock_cf.load.return_value = config
+        mocker.patch("vk_uploader.cli.ConfigFile", return_value=mock_cf)
+        mocker.patch("vk_uploader.auth.ensure_token")
+
+        with pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 1
+
+    def test_subtitles_with_lang_passes(self, mocker):
+        """subtitles=true with lang=ru → proceeds to pipeline."""
+        from vk_uploader.models import AppConfig, VkConfig, DefaultsConfig, DownloadConfig
+
+        config = AppConfig(
+            vk=VkConfig(access_token="tok", group_id="456", app_id="123"),
+            defaults=DefaultsConfig(subtitles=True, lang="ru"),
+            download=DownloadConfig(),
+        )
+
+        mocker.patch.object(sys, "argv", ["vk_uploader", "https://youtube.com/watch?v=abc"])
+        mocker.patch("vk_uploader.cli.create_console")
+        mock_cf = mocker.MagicMock()
+        mock_cf.load.return_value = config
+        mocker.patch("vk_uploader.cli.ConfigFile", return_value=mock_cf)
+        mocker.patch("vk_uploader.auth.ensure_token")
+        mock_pipeline = mocker.patch("vk_uploader.cli.run_pipeline")
+
+        main()
+        mock_pipeline.assert_called_once()
+
+
+class TestCmdSetup:
+    def test_complete_config_prints_summary(self, mocker):
+        """cmd_setup with complete config → prints summary, no errors."""
+        from vk_uploader.models import AppConfig, VkConfig, DefaultsConfig, DownloadConfig
+
+        config = AppConfig(
+            vk=VkConfig(access_token="tok123", group_id="456", app_id="123", user_id="1"),
+            defaults=DefaultsConfig(),
+            download=DownloadConfig(),
+        )
+
+        console = mocker.MagicMock()
+        mock_cf = mocker.MagicMock()
+        mock_cf.load.return_value = config
+        mocker.patch("vk_uploader.cli.ConfigFile", return_value=mock_cf)
+        mocker.patch("vk_uploader.auth.ensure_token")
+        mocker.patch("vk_uploader.auth._verify_token", return_value=True)
+        mocker.patch("vk_uploader.cli._detect_browsers", return_value=["firefox"])
+
+        cmd_setup(console)
+
+        # Should have printed summary (Table objects created).
+        assert console.print.call_count > 0
+
+    def test_cookies_prompt_shown_when_not_set(self, mocker):
+        """cmd_setup prompts for cookies_from_browser when not configured."""
+        from vk_uploader.models import AppConfig, VkConfig, DefaultsConfig, DownloadConfig
+
+        config = AppConfig(
+            vk=VkConfig(access_token="tok123", group_id="456", app_id="123", user_id="1"),
+            defaults=DefaultsConfig(cookies_from_browser=""),
+            download=DownloadConfig(),
+        )
+
+        console = mocker.MagicMock()
+        console.input.return_value = "firefox"
+        mock_cf = mocker.MagicMock()
+        mock_cf.load.return_value = config
+        mocker.patch("vk_uploader.cli.ConfigFile", return_value=mock_cf)
+        mocker.patch("vk_uploader.auth.ensure_token")
+        mocker.patch("vk_uploader.auth._verify_token", return_value=True)
+        mocker.patch("vk_uploader.cli._detect_browsers", return_value=["firefox", "chrome"])
+
+        cmd_setup(console)
+
+        # Should have saved cookies_from_browser.
+        assert config.defaults.cookies_from_browser == "firefox"
+        mock_cf.save.assert_called()
+
+    def test_invalid_token_exits(self, mocker):
+        """cmd_setup with invalid token → exits with code 1."""
+        from vk_uploader.models import AppConfig, VkConfig, DefaultsConfig, DownloadConfig
+
+        config = AppConfig(
+            vk=VkConfig(access_token="bad", group_id="456", app_id="123"),
+            defaults=DefaultsConfig(),
+            download=DownloadConfig(),
+        )
+
+        console = mocker.MagicMock()
+        mock_cf = mocker.MagicMock()
+        mock_cf.load.return_value = config
+        mocker.patch("vk_uploader.cli.ConfigFile", return_value=mock_cf)
+        mocker.patch("vk_uploader.auth.ensure_token")
+        mocker.patch("vk_uploader.auth._verify_token", return_value=False)
+
+        with pytest.raises(SystemExit) as exc:
+            cmd_setup(console)
+        assert exc.value.code == 1

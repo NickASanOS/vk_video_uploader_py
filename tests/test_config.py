@@ -172,7 +172,7 @@ def test_translation_defaults_when_missing(tmp_path: Path):
     cfg = ConfigFile(config_dir=str(tmp_path), filename=CONFIG_FILENAME)
     config = cfg.load()
     assert config.defaults.translation is False
-    assert config.defaults.lang == "ru"
+    assert config.defaults.lang == ""
 
 
 def test_subtitles_defaults_to_false(tmp_path: Path):
