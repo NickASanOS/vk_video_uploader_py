@@ -2,6 +2,16 @@
 
 All notable changes to vk_uploader.
 
+## [0.0.7] — 2026-05-22
+
+### Added
+- Interactive `vk_uploader setup` wizard with token verification and browser-cookie setup.
+- Runtime VK token validation before upload, with re-authorization for invalid or expired tokens.
+- Required `lang` validation when translation or subtitles are enabled.
+
+### Fixed
+- Release checks now pass under ruff and strict mypy.
+
 ## [0.0.5] — 2026-05-20
 
 ### Added
@@ -72,6 +82,9 @@ All notable changes to vk_uploader.
 - Full CI pipeline: lint (ruff), typecheck (mypy), tests (pytest) on 3.11–3.13
 - 46 unit and integration tests
 
+[0.0.7]: https://github.com/NickASanOS/vk_video_uploader_py/releases/tag/v0.0.7
+[0.0.6]: https://github.com/NickASanOS/vk_video_uploader_py/releases/tag/v0.0.6
+[0.0.5]: https://github.com/NickASanOS/vk_video_uploader_py/releases/tag/v0.0.5
 [0.0.4]: https://github.com/NickASanOS/vk_video_uploader_py/releases/tag/v0.0.4
 [0.0.3]: https://github.com/NickASanOS/vk_video_uploader_py/releases/tag/v0.0.3
 [0.0.2]: https://github.com/NickASanOS/vk_video_uploader_py/releases/tag/v0.0.2

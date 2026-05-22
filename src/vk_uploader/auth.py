@@ -167,10 +167,14 @@ def _verify_token(token: str) -> bool:
         )
         data: dict[str, object] = resp.json()
         if "error" in data:
-            err: dict[str, object] = data["error"]  # type: ignore[assignment]
+            raw_error = data["error"]
+            err = raw_error if isinstance(raw_error, dict) else {}
             code = err.get("error_code", -1)
             # 5 = user authorization failed (bad token)
-            return int(code) != 5  # type: ignore[arg-type]
+            try:
+                return int(str(code)) != 5
+            except (TypeError, ValueError):
+                return True
         return "response" in data
     except Exception:
         # Network error — don't invalidate the token, let the main flow handle it.

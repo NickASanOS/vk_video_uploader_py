@@ -272,8 +272,13 @@ def cmd_setup(console: Console) -> None:
         table.add_row(label, value)
 
     _row("App ID", config.vk.app_id or "[red](not set)[/red]")
-    token_display = config.vk.access_token[:12] + "..." if config.vk.access_token else "[red](not set)[/red]"
-    _row("Token", f"[green]{token_display}[/green]" if config.vk.access_token else token_display)
+    token_display = (
+        config.vk.access_token[:12] + "..."
+        if config.vk.access_token
+        else "[red](not set)[/red]"
+    )
+    token_value = f"[green]{token_display}[/green]" if config.vk.access_token else token_display
+    _row("Token", token_value)
     _row("Group ID", config.vk.group_id or "[red](not set)[/red]")
     _row("Expires", config.vk.expires_at or "(never)")
     _row("User ID", config.vk.user_id or "(unknown)")
@@ -286,10 +291,30 @@ def cmd_setup(console: Console) -> None:
     table2.add_column()
     table2.add_row("Output dir", config.download.output_dir)
     table2.add_row("Publish delay", f"{config.defaults.publish_delay_hours}h")
-    table2.add_row("Thumbnail", "[green]on[/green]" if config.defaults.thumbnail else "[dim]off[/dim]")
-    table2.add_row("Wall post", "[green]on[/green]" if config.defaults.wallpost else "[dim]off[/dim]")
-    table2.add_row("Subtitles", f"[green]on[/green] → {config.defaults.lang}" if config.defaults.subtitles else "[dim]off[/dim]")
-    table2.add_row("Translation", f"[green]on[/green] → {config.defaults.lang}" if config.defaults.translation else "[dim]off[/dim]")
+    table2.add_row(
+        "Thumbnail",
+        "[green]on[/green]" if config.defaults.thumbnail else "[dim]off[/dim]",
+    )
+    table2.add_row(
+        "Wall post",
+        "[green]on[/green]" if config.defaults.wallpost else "[dim]off[/dim]",
+    )
+    table2.add_row(
+        "Subtitles",
+        (
+            f"[green]on[/green] → {config.defaults.lang}"
+            if config.defaults.subtitles
+            else "[dim]off[/dim]"
+        ),
+    )
+    table2.add_row(
+        "Translation",
+        (
+            f"[green]on[/green] → {config.defaults.lang}"
+            if config.defaults.translation
+            else "[dim]off[/dim]"
+        ),
+    )
     table2.add_row("Language", config.defaults.lang or "(not set)")
     table2.add_row("Cookies", config.defaults.cookies_from_browser or "(none)")
     console.print(table2)

@@ -7,7 +7,7 @@ from unittest import mock
 
 import pytest
 
-from vk_uploader.cli import main, parse_args, cmd_setup
+from vk_uploader.cli import cmd_setup, main, parse_args
 from vk_uploader.models import UsageError, parse_bool
 
 
@@ -121,7 +121,7 @@ class TestMain:
 
     def test_subtitles_true_without_lang_exits(self, mocker):
         """subtitles=true without lang → error."""
-        from vk_uploader.models import AppConfig, VkConfig, DefaultsConfig, DownloadConfig
+        from vk_uploader.models import AppConfig, DefaultsConfig, DownloadConfig, VkConfig
 
         config = AppConfig(
             vk=VkConfig(access_token="tok", group_id="456", app_id="123"),
@@ -142,7 +142,7 @@ class TestMain:
 
     def test_translation_true_without_lang_exits(self, mocker):
         """translation=true without lang → error."""
-        from vk_uploader.models import AppConfig, VkConfig, DefaultsConfig, DownloadConfig
+        from vk_uploader.models import AppConfig, DefaultsConfig, DownloadConfig, VkConfig
 
         config = AppConfig(
             vk=VkConfig(access_token="tok", group_id="456", app_id="123"),
@@ -163,7 +163,7 @@ class TestMain:
 
     def test_subtitles_with_lang_passes(self, mocker):
         """subtitles=true with lang=ru → proceeds to pipeline."""
-        from vk_uploader.models import AppConfig, VkConfig, DefaultsConfig, DownloadConfig
+        from vk_uploader.models import AppConfig, DefaultsConfig, DownloadConfig, VkConfig
 
         config = AppConfig(
             vk=VkConfig(access_token="tok", group_id="456", app_id="123"),
@@ -186,7 +186,7 @@ class TestMain:
 class TestCmdSetup:
     def test_complete_config_prints_summary(self, mocker):
         """cmd_setup with complete config → prints summary, no errors."""
-        from vk_uploader.models import AppConfig, VkConfig, DefaultsConfig, DownloadConfig
+        from vk_uploader.models import AppConfig, DefaultsConfig, DownloadConfig, VkConfig
 
         config = AppConfig(
             vk=VkConfig(access_token="tok123", group_id="456", app_id="123", user_id="1"),
@@ -209,7 +209,7 @@ class TestCmdSetup:
 
     def test_cookies_prompt_shown_when_not_set(self, mocker):
         """cmd_setup prompts for cookies_from_browser when not configured."""
-        from vk_uploader.models import AppConfig, VkConfig, DefaultsConfig, DownloadConfig
+        from vk_uploader.models import AppConfig, DefaultsConfig, DownloadConfig, VkConfig
 
         config = AppConfig(
             vk=VkConfig(access_token="tok123", group_id="456", app_id="123", user_id="1"),
@@ -234,7 +234,7 @@ class TestCmdSetup:
 
     def test_invalid_token_exits(self, mocker):
         """cmd_setup with invalid token → exits with code 1."""
-        from vk_uploader.models import AppConfig, VkConfig, DefaultsConfig, DownloadConfig
+        from vk_uploader.models import AppConfig, DefaultsConfig, DownloadConfig, VkConfig
 
         config = AppConfig(
             vk=VkConfig(access_token="bad", group_id="456", app_id="123"),
