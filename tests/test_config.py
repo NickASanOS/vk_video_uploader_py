@@ -150,6 +150,16 @@ def test_resolve_output_dir_accepts_file_uri():
     assert result == Path("/tmp/Videos")
 
 
+def test_load_normalizes_file_uri_output_dir(tmp_path: Path):
+    p = tmp_path / CONFIG_FILENAME
+    p.write_text(yaml.safe_dump({"download": {"output_dir": "file:///tmp/Videos"}}))
+
+    cfg = ConfigFile(config_dir=str(tmp_path), filename=CONFIG_FILENAME)
+    config = cfg.load()
+
+    assert config.download.output_dir == "/tmp/Videos"
+
+
 def test_save_omits_empty_optional_fields(tmp_path: Path):
     config = AppConfig(
         vk=VkConfig(access_token="tok"),

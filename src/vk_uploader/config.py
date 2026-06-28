@@ -124,16 +124,21 @@ class ConfigFile:
                 f"Invalid value in config defaults: {e}"
             ) from e
         download = DownloadConfig(
-            output_dir=str(download_data.get("output_dir", "~/Downloads")),
+            output_dir=normalize_config_path(str(download_data.get("output_dir", "~/Downloads"))),
             video_format=str(download_data.get("video_format", "bv*+ba/b")),
         )
         return AppConfig(vk=vk, defaults=defaults, download=download)
 
 
-def normalize_path(value: str) -> Path:
-    """Normalize user-provided filesystem paths."""
+def normalize_config_path(value: str) -> str:
+    """Normalize path values while preserving config-friendly notation."""
     raw_value = value.strip()
     parsed = urlparse(raw_value)
     if parsed.scheme == "file":
-        raw_value = unquote(parsed.path)
-    return Path(raw_value).expanduser()
+        return unquote(parsed.path)
+    return raw_value
+
+
+def normalize_path(value: str) -> Path:
+    """Normalize user-provided filesystem paths."""
+    return Path(normalize_config_path(value)).expanduser()
