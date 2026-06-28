@@ -7,6 +7,7 @@ import os
 import stat
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlparse
 
 import yaml
 
@@ -91,7 +92,7 @@ class ConfigFile:
 
     def resolve_output_dir(self, config: AppConfig) -> Path:
         """Expand ~ in output_dir and return as Path."""
-        return Path(config.download.output_dir).expanduser()
+        return normalize_path(config.download.output_dir)
 
     def _dict_to_config(self, data: dict[str, Any]) -> AppConfig:
         vk_data = data.get("vk", {})
@@ -127,3 +128,12 @@ class ConfigFile:
             video_format=str(download_data.get("video_format", "bv*+ba/b")),
         )
         return AppConfig(vk=vk, defaults=defaults, download=download)
+
+
+def normalize_path(value: str) -> Path:
+    """Normalize user-provided filesystem paths."""
+    raw_value = value.strip()
+    parsed = urlparse(raw_value)
+    if parsed.scheme == "file":
+        raw_value = unquote(parsed.path)
+    return Path(raw_value).expanduser()

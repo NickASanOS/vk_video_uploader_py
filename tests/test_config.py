@@ -143,6 +143,13 @@ def test_resolve_output_dir_expands_tilde():
     assert result == Path.home() / "Downloads"
 
 
+def test_resolve_output_dir_accepts_file_uri():
+    cfg = ConfigFile(config_dir="/tmp/test")
+    config = AppConfig(download=DownloadConfig(output_dir="file:///tmp/Videos"))
+    result = cfg.resolve_output_dir(config)
+    assert result == Path("/tmp/Videos")
+
+
 def test_save_omits_empty_optional_fields(tmp_path: Path):
     config = AppConfig(
         vk=VkConfig(access_token="tok"),

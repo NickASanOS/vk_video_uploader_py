@@ -8,7 +8,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
-from vk_uploader.config import ConfigFile
+from vk_uploader.config import ConfigFile, normalize_path
 from vk_uploader.logging_setup import create_console
 from vk_uploader.models import (
     AppConfig,
@@ -231,6 +231,8 @@ def cmd_setup(console: Console) -> None:
         console.print("[red]✗ (token invalid — re-run setup)[/red]")
         sys.exit(1)
 
+    _configure_output_dir(console, config_file, config)
+
     # --- Browser cookies (optional, helps avoid YouTube bot detection) ---
     if not config.defaults.cookies_from_browser:
         console.print()
@@ -326,6 +328,22 @@ def cmd_setup(console: Console) -> None:
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
+
+def _configure_output_dir(
+    console: Console, config_file: ConfigFile, config: AppConfig
+) -> None:
+    """Prompt for the download directory and persist it in config."""
+    current = config.download.output_dir.strip() or "~/Downloads"
+
+    console.print()
+    raw_value = console.input(f"Download directory [{current}]: ").strip()
+    output_dir = str(normalize_path(raw_value or current))
+
+    if output_dir != config.download.output_dir:
+        config.download.output_dir = output_dir
+
+    config_file.save(config)
 
 
 def _apply_overrides(config: AppConfig, overrides: dict[str, str]) -> None:

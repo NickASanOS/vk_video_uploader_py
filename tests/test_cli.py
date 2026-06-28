@@ -190,11 +190,12 @@ class TestCmdSetup:
 
         config = AppConfig(
             vk=VkConfig(access_token="tok123", group_id="456", app_id="123", user_id="1"),
-            defaults=DefaultsConfig(),
+            defaults=DefaultsConfig(cookies_from_browser="firefox"),
             download=DownloadConfig(),
         )
 
         console = mocker.MagicMock()
+        console.input.return_value = ""
         mock_cf = mocker.MagicMock()
         mock_cf.load.return_value = config
         mocker.patch("vk_uploader.cli.ConfigFile", return_value=mock_cf)
@@ -218,7 +219,7 @@ class TestCmdSetup:
         )
 
         console = mocker.MagicMock()
-        console.input.return_value = "firefox"
+        console.input.side_effect = ["", "firefox"]
         mock_cf = mocker.MagicMock()
         mock_cf.load.return_value = config
         mocker.patch("vk_uploader.cli.ConfigFile", return_value=mock_cf)
@@ -231,6 +232,29 @@ class TestCmdSetup:
         # Should have saved cookies_from_browser.
         assert config.defaults.cookies_from_browser == "firefox"
         mock_cf.save.assert_called()
+
+    def test_setup_saves_output_dir(self, mocker):
+        """cmd_setup saves custom download output directory."""
+        from vk_uploader.models import AppConfig, DefaultsConfig, DownloadConfig, VkConfig
+
+        config = AppConfig(
+            vk=VkConfig(access_token="tok123", group_id="456", app_id="123", user_id="1"),
+            defaults=DefaultsConfig(cookies_from_browser="firefox"),
+            download=DownloadConfig(),
+        )
+
+        console = mocker.MagicMock()
+        console.input.return_value = "/tmp/videos"
+        mock_cf = mocker.MagicMock()
+        mock_cf.load.return_value = config
+        mocker.patch("vk_uploader.cli.ConfigFile", return_value=mock_cf)
+        mocker.patch("vk_uploader.auth.ensure_token")
+        mocker.patch("vk_uploader.auth._verify_token", return_value=True)
+
+        cmd_setup(console)
+
+        assert config.download.output_dir == "/tmp/videos"
+        mock_cf.save.assert_called_with(config)
 
     def test_invalid_token_exits(self, mocker):
         """cmd_setup with invalid token → exits with code 1."""

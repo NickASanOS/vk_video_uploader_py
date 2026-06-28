@@ -71,6 +71,7 @@ The wizard will guide you through:
 - **OAuth authorization** — opens browser, you log in and paste the redirect URL
 - **Group ID** — your VK community ID (find it in any post URL: `wall-123456789_...`)
 - **Token verification** — validates the token against VK API
+- **Download directory** — where video, thumbnail, and subtitle files are saved (`~/Downloads` by default)
 - **Browser cookies** (optional) — detects installed browsers, helps avoid YouTube bot detection
 
 All values are saved to `~/.config/vk_uploader/config.yaml`.
