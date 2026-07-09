@@ -336,6 +336,21 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
     )
     console.print("[bold green]Done![/bold green]")
 
+    # ── Cleanup (optional) ──
+    if config.defaults.cleanup_after_upload:
+        console.print()
+        console.print("[dim]Cleaning up downloaded files...[/dim]")
+        # Remove video file.
+        if result.file_path.exists():
+            result.file_path.unlink()
+            console.print(f"  [dim]Removed: {result.file_path.name}[/dim]")
+        # Remove any remaining subtitle files.
+        video_stem = result.file_path.stem
+        for srt_file in sorted(result.file_path.parent.glob(f"{video_stem}*.srt")):
+            srt_file.unlink(missing_ok=True)
+            console.print(f"  [dim]Removed: {srt_file.name}[/dim]")
+        console.print("[green]Cleanup complete.[/green]")
+
 
 def _log_stage(console: Console, stage: PipelineStage) -> None:
     console.print(f"\n[bold cyan]── {stage.label} ──[/bold cyan]")

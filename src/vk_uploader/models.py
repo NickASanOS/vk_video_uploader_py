@@ -105,6 +105,7 @@ class DefaultsConfig:
     subtitles: bool = False
     lang: str = ""
     cookies_from_browser: str = ""
+    cleanup_after_upload: bool = False
 
 
 @dataclass

@@ -107,6 +107,7 @@ vk_uploader <url> thumbnail=false publish_delay_hours=48 output_dir=/tmp/videos
 | `cookies_from_browser=` | str | — | Browser to extract cookies from (firefox, chrome, ...) |
 | `title=` | str | — | Video title (default: from YouTube) |
 | `description=` | str | — | Video description (default: from YouTube) |
+| `cleanup_after_upload=` | bool | `false` | Remove local video file after successful upload |
 
 If `translation=true` or `subtitles=true` is set, `lang=<code>` must also be provided
 (e.g. `lang=ru`, `lang=en`). The tool will exit with an error if `lang` is missing.
@@ -115,6 +116,66 @@ Subtitles are downloaded as `.srt` files. The downloader asks yt-dlp for the tar
 language first and English as a fallback; if the best available subtitle is not in
 the target language, it is translated locally to `lang=<code>`.
 Subtitles are **not uploaded to VK** (VK API does not support SRT subtitle upload).
+
+## Batch uploads
+
+Upload multiple videos from a text file using `links_file=<path>`:
+
+```bash
+vk_uploader links_file=/path/to/links.txt
+vk_uploader links_file=/path/to/links.txt publish_delay_hours=48 thumbnail=false
+```
+
+### File format
+
+One job per line. Same `key=value` syntax as CLI overrides:
+
+```text
+<youtube_url> [key=value ...]
+ylink=<youtube_url> [key=value ...]
+# comments
+```
+
+Example `links.txt`:
+
+```text
+https://www.youtube.com/watch?v=DsLQptIzUuM subtitles=true lang=ru
+https://www.youtube.com/watch?v=1f5gEQHy2cg wallpost=true
+ylink=https://www.youtube.com/watch?v=abc title="Custom Title"
+# This is a comment
+```
+
+### Precedence
+
+```
+config.yaml < command-level overrides < line-level overrides
+```
+
+Options passed on the command line (e.g. `publish_delay_hours=48`) apply to all
+jobs unless a line overrides them.
+
+### Shell-like quoting
+
+Values with spaces can be quoted:
+
+```text
+https://youtube.com/watch?v=abc title="My Video Title" description='A description'
+```
+
+### Parsing rules
+
+- Blank lines are ignored.
+- Lines starting with `#` are comments.
+- Malformed lines are reported with file path and line number.
+- The file must contain at least one valid job line.
+
+### Behavior
+
+- Config and VK auth are loaded once for all jobs.
+- Each job gets an isolated config — per-line settings do not leak between jobs.
+- Jobs are processed sequentially.
+- A summary is printed at the end with succeeded/failed counts.
+- Exit code is non-zero if any job fails.
 
 ## Config file
 
@@ -136,6 +197,7 @@ defaults:
   subtitles: false
   lang: ""           # required when translation or subtitles is true
   cookies_from_browser: ""  # e.g. "firefox", "chrome"
+  cleanup_after_upload: false  # remove local files after upload
 
 download:
   output_dir: "~/Downloads"

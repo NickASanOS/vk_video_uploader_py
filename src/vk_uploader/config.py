@@ -72,6 +72,7 @@ class ConfigFile:
                 "subtitles": config.defaults.subtitles,
                 "lang": config.defaults.lang,
                 "cookies_from_browser": config.defaults.cookies_from_browser,
+                "cleanup_after_upload": config.defaults.cleanup_after_upload,
             },
             "download": {
                 "output_dir": config.download.output_dir,
@@ -116,6 +117,9 @@ class ConfigFile:
                 subtitles=parse_bool(d.get("subtitles", False), "defaults.subtitles"),
                 lang=str(d.get("lang", "")),
                 cookies_from_browser=str(d.get("cookies_from_browser", "")),
+                cleanup_after_upload=parse_bool(
+                    d.get("cleanup_after_upload", False), "defaults.cleanup_after_upload"
+                ),
             )
         except UsageError as e:
             raise ConfigError(str(e)) from e

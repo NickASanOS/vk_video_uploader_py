@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 import sys
 from pathlib import Path
 
@@ -15,10 +16,13 @@ from vk_uploader.models import (
     AuthError,
     BotDetectionError,
     ConfigError,
+    DefaultsConfig,
+    DownloadConfig,
     DownloadError,
     JobContext,
     PipelineStage,
     UsageError,
+    VkConfig,
     parse_bool,
 )
 from vk_uploader.pipeline import run_pipeline
@@ -40,7 +44,13 @@ _VALID_OVERRIDES = frozenset({
     "lang",
     "cookies_from_browser",
     "album",
+    "links_file",
+    "cleanup_after_upload",
 })
+
+_OVERRIDE_ALIASES = {
+    "cleanup": "cleanup_after_upload",
+}
 
 
 def parse_args(argv: list[str]) -> tuple[str, dict[str, str]]:
@@ -49,6 +59,9 @@ def parse_args(argv: list[str]) -> tuple[str, dict[str, str]]:
     Supports:
       vk_uploader <youtube_url> [key=value ...]
       vk_uploader ylink=<youtube_url> [key=value ...]
+      vk_uploader links_file=<path> [key=value ...]
+
+    When links_file is present, url may be empty string (URLs come from file).
     """
     url: str | None = None
     overrides: dict[str, str] = {}
@@ -75,10 +88,12 @@ def parse_args(argv: list[str]) -> tuple[str, dict[str, str]]:
                     raise UsageError("Only one YouTube URL may be provided.")
                 url = arg
                 continue
-            key = key.strip().lower()
+            key = _normalize_override_key(key.strip().lower())
             value = value.strip()
             if not key:
                 raise UsageError(f"Invalid argument: {arg!r}")
+            if key == "links_file" and not value:
+                raise UsageError("links_file must not be empty.")
             if key == "ylink":
                 if url is not None:
                     raise UsageError("URL specified both positionally and as ylink=...")
@@ -90,12 +105,15 @@ def parse_args(argv: list[str]) -> tuple[str, dict[str, str]]:
                     f"Unknown option: {key!r}. Valid options: {sorted(_VALID_OVERRIDES)}"
                 )
 
-    if url is None:
+    if "links_file" in overrides and url is not None:
+        raise UsageError("links_file cannot be combined with a YouTube URL or ylink=...")
+
+    if url is None and "links_file" not in overrides:
         raise UsageError(
             "YouTube URL is required.\nUsage: vk_uploader <youtube_url> [key=value ...]"
         )
 
-    return url, overrides
+    return url or "", overrides
 
 
 def main() -> None:
@@ -113,6 +131,12 @@ def main() -> None:
             return
 
         url, overrides = parse_args(args)
+
+        # ── Batch mode: links_file=<path> ──
+        links_file = overrides.pop("links_file", None)
+        if links_file is not None:
+            _batch_main(console, links_file, overrides)
+            return
 
         config_file = ConfigFile()
         config = config_file.load()
@@ -325,6 +349,10 @@ def cmd_setup(console: Console) -> None:
     )
     table2.add_row("Language", config.defaults.lang or "(not set)")
     table2.add_row("Cookies", config.defaults.cookies_from_browser or "(none)")
+    table2.add_row(
+        "Cleanup",
+        "[green]on[/green]" if config.defaults.cleanup_after_upload else "[dim]off[/dim]",
+    )
     console.print(table2)
 
     console.print()
@@ -385,33 +413,45 @@ def _apply_overrides(config: AppConfig, overrides: dict[str, str]) -> None:
         config.defaults.lang = overrides["lang"]
     if "cookies_from_browser" in overrides:
         config.defaults.cookies_from_browser = overrides["cookies_from_browser"]
+    if "cleanup_after_upload" in overrides:
+        config.defaults.cleanup_after_upload = parse_bool(
+            overrides["cleanup_after_upload"], "cleanup_after_upload"
+        )
 
 
 def _validate_config(console: Console, config: AppConfig) -> None:
     """Validate required config values; print error and exit if missing."""
+    errors = _check_config(config)
+    if errors:
+        for msg in errors:
+            console.print(f"[red]{msg}[/red]")
+        sys.exit(1)
+
+
+def _check_config(config: AppConfig) -> list[str]:
+    """Validate config; return list of error messages (empty if valid)."""
+    errors: list[str] = []
     token = config.vk.access_token.strip()
     if not token:
-        console.print("[red]VK access token is required.[/red]")
-        console.print("Run [bold]vk_uploader setup[/bold] to configure.")
-        sys.exit(1)
+        errors.append("VK access token is required.")
+        errors.append("Run vk_uploader setup to configure.")
 
     group_id = config.vk.group_id.strip()
     if not group_id:
-        console.print("[red]VK Group ID is required.[/red]")
-        console.print("Run [bold]vk_uploader setup[/bold] to configure.")
-        sys.exit(1)
+        errors.append("VK Group ID is required.")
+        errors.append("Run vk_uploader setup to configure.")
 
     if config.defaults.subtitles or config.defaults.translation:
         lang = config.defaults.lang.strip()
         if not lang:
-            console.print(
-                "[red]lang is required when subtitles=true or translation=true.[/red]"
+            errors.append(
+                "lang is required when subtitles=true or translation=true."
             )
-            console.print(
+            errors.append(
                 "Pass lang=<code> to specify the target language"
                 " (e.g. lang=ru, lang=en)."
             )
-            sys.exit(1)
+    return errors
 
 
 # ── usage ─────────────────────────────────────────────────────────────────────
@@ -423,6 +463,22 @@ def _print_usage() -> None:
     print("Usage:")
     print("  vk_uploader setup               Interactive configuration wizard")
     print("  vk_uploader <youtube_url> [key=value ...]")
+    print("  vk_uploader links_file=<path> [key=value ...]")
+    print()
+    print("Batch mode (links_file):")
+    print("  Upload multiple videos from a text file, one URL per line.")
+    print("  Per-line overrides use the same key=value syntax.")
+    print("  Precedence: config.yaml < command-level overrides < line-level overrides.")
+    print()
+    print("  File format:")
+    print("    <youtube_url> [key=value ...]")
+    print("    ylink=<youtube_url> [key=value ...]")
+    print("    # comments")
+    print()
+    print("  Example links.txt:")
+    print("    https://www.youtube.com/watch?v=DsLQptIzUuM subtitles=true")
+    print("    https://www.youtube.com/watch?v=1f5gEQHy2cg wallpost=true")
+    print("    ylink=https://www.youtube.com/watch?v=abc title=\"Custom Title\"")
     print()
     print("Supported options:")
     print("  ylink=<url>              YouTube video URL (alternative to positional)")
@@ -439,6 +495,10 @@ def _print_usage() -> None:
     print("  album=true|<name>        Add video to album (interactive or by name)")
     print("  title=<str>              Video title (default: from YouTube)")
     print("  description=<str>        Video description (default: from YouTube)")
+    print(
+        "  cleanup_after_upload=true|false"
+        "  Remove local files after successful upload (default: false)"
+    )
     print()
     print("Config file: ~/.config/vk_uploader/config.yaml")
     print()
@@ -446,6 +506,232 @@ def _print_usage() -> None:
     print("  firefox, chrome, chromium, brave, edge, opera, vivaldi")
     print()
     print("Use cookies_from_browser=<browser> to avoid YouTube bot detection.")
+
+
+# ── batch mode ────────────────────────────────────────────────────────────────
+
+
+def parse_links_file(path: str) -> list[tuple[int, str, dict[str, str]]]:
+    """Parse a links file. Returns list of (line_number, url, overrides).
+
+    Raises UsageError on malformed lines.
+    """
+    jobs: list[tuple[int, str, dict[str, str]]] = []
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line_num, raw in enumerate(f, 1):
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                url, overrides = _parse_line_args(line, path, line_num)
+                jobs.append((line_num, url, overrides))
+    except OSError as e:
+        raise UsageError(f"{path}: cannot read links file: {e.strerror}") from e
+    if not jobs:
+        raise UsageError(f"{path}: no valid job lines found")
+    return jobs
+
+
+def _parse_line_args(
+    line: str, path: str, line_num: int
+) -> tuple[str, dict[str, str]]:
+    """Parse a single line from a links file.
+
+    Uses shlex for shell-like quoting (title="My Video", etc.).
+    Same semantics as parse_args() for key=value handling.
+    """
+    try:
+        tokens = shlex.split(line)
+    except ValueError as e:
+        raise UsageError(f"{path}:{line_num}: invalid quoting: {e}") from e
+
+    url: str | None = None
+    overrides: dict[str, str] = {}
+
+    for token in tokens:
+        if "=" not in token:
+            if url is not None:
+                raise UsageError(
+                    f"{path}:{line_num}: only one YouTube URL per line"
+                )
+            url = token
+            continue
+
+        key, _, value = token.partition("=")
+        # URL with query string (contains :// → not a key=value override).
+        if "://" in key:
+            if url is not None:
+                raise UsageError(
+                    f"{path}:{line_num}: only one YouTube URL per line"
+                )
+            url = token
+            continue
+
+        key = _normalize_override_key(key.strip().lower())
+        value = value.strip()
+        if not key:
+            raise UsageError(
+                f"{path}:{line_num}: invalid argument: {token!r}"
+            )
+        if key == "ylink":
+            if url is not None:
+                raise UsageError(
+                    f"{path}:{line_num}: URL specified both"
+                    " positionally and as ylink=..."
+                )
+            url = value
+        elif key in _VALID_OVERRIDES:
+            overrides[key] = value
+        else:
+            raise UsageError(
+                f"{path}:{line_num}: unknown option: {key!r}"
+            )
+
+    if url is None:
+        raise UsageError(f"{path}:{line_num}: YouTube URL is required")
+
+    return url, overrides
+
+
+def _normalize_override_key(key: str) -> str:
+    """Return the canonical override key for CLI aliases."""
+    return _OVERRIDE_ALIASES.get(key, key)
+
+
+def _copy_config(config: AppConfig) -> AppConfig:
+    """Deep-copy AppConfig for per-line isolation in batch mode."""
+    return AppConfig(
+        vk=VkConfig(
+            access_token=config.vk.access_token,
+            group_id=config.vk.group_id,
+            app_id=config.vk.app_id,
+            expires_at=config.vk.expires_at,
+            user_id=config.vk.user_id,
+        ),
+        defaults=DefaultsConfig(
+            publish_delay_hours=config.defaults.publish_delay_hours,
+            thumbnail=config.defaults.thumbnail,
+            wallpost=config.defaults.wallpost,
+            translation=config.defaults.translation,
+            subtitles=config.defaults.subtitles,
+            lang=config.defaults.lang,
+            cookies_from_browser=config.defaults.cookies_from_browser,
+            cleanup_after_upload=config.defaults.cleanup_after_upload,
+        ),
+        download=DownloadConfig(
+            output_dir=config.download.output_dir,
+            video_format=config.download.video_format,
+        ),
+    )
+
+
+def _batch_main(
+    console: Console,
+    links_file: str,
+    global_overrides: dict[str, str],
+) -> None:
+    """Process multiple upload jobs from a links file."""
+    from vk_uploader.auth import ensure_token
+
+    # Parse before auth so file/format errors fail quickly without prompting.
+    jobs = parse_links_file(links_file)
+
+    config_file = ConfigFile()
+    config = config_file.load()
+
+    # ── Auth (once for all jobs) ──
+    old_token = config.vk.access_token
+    ensure_token(console, config_file, config)
+    if config.vk.access_token != old_token:
+        config = config_file.load()
+
+    # ── Apply command-level overrides to base config ──
+    _apply_overrides(config, global_overrides)
+
+    # ── Process jobs sequentially ──
+    succeeded: list[tuple[int, str]] = []
+    failed: list[tuple[int, str, str]] = []
+
+    total = len(jobs)
+
+    for idx, (line_num, url, line_overrides) in enumerate(jobs, 1):
+        console.print(
+            f"\n[bold]── Job {idx}/{total} (line {line_num}) ──[/bold]"
+        )
+        console.print(f"  URL: [dim]{url}[/dim]")
+
+        # Isolate config: copy base (with global overrides), then apply line overrides.
+        job_config = _copy_config(config)
+        _apply_overrides(job_config, line_overrides)
+
+        # Validate
+        errors = _check_config(job_config)
+        if errors:
+            console.print(f"[red]  Config error: {errors[0]}[/red]")
+            failed.append((line_num, url, errors[0]))
+            continue
+
+        title_override = line_overrides.get("title", global_overrides.get("title"))
+        description_override = line_overrides.get(
+            "description", global_overrides.get("description")
+        )
+        album_spec = line_overrides.get("album", global_overrides.get("album"))
+
+        output_dir = config_file.resolve_output_dir(job_config)
+
+        ctx = JobContext(
+            youtube_url=url,
+            output_dir=output_dir,
+            group_id=job_config.vk.group_id,
+            publish_delay_hours=job_config.defaults.publish_delay_hours,
+            thumbnail_enabled=job_config.defaults.thumbnail,
+            wallpost=job_config.defaults.wallpost,
+            title_override=title_override,
+            description_override=description_override,
+            album_spec=album_spec,
+        )
+
+        # ── Run pipeline with bot-detection retry ──
+        while True:
+            try:
+                run_pipeline(console, ctx, job_config)
+                break
+            except BotDetectionError:
+                if job_config.defaults.cookies_from_browser:
+                    raise
+                browser = _prompt_browser(console)
+                if browser is None:
+                    raise
+                job_config.defaults.cookies_from_browser = browser
+                config.defaults.cookies_from_browser = browser
+                config_file.save(config)
+                console.print(
+                    f"[green]Saved cookies_from_browser={browser}"
+                    f" to config. Retrying...[/green]"
+                )
+                continue
+
+        if ctx.stage == PipelineStage.ERROR:
+            failed.append(
+                (line_num, url, ctx.error_message or "unknown error")
+            )
+        else:
+            succeeded.append((line_num, url))
+
+    # ── Batch summary ──
+    console.print()
+    console.print("[bold]══ Batch Summary ══[/bold]")
+    console.print(
+        f"  Total:   {total}\n"
+        f"  Success: [green]{len(succeeded)}[/green]\n"
+        f"  Failed:  [red]{len(failed)}[/red]"
+    )
+
+    if failed:
+        console.print("\n[bold red]Failed jobs:[/bold red]")
+        for line_num, url, reason in failed:
+            console.print(f"  Line {line_num}: [dim]{url}[/dim] — {reason}")
+        sys.exit(1)
 
 
 # ── browser helpers ───────────────────────────────────────────────────────────
