@@ -224,12 +224,15 @@ class YtDlpDownloader:
             info, "id", _extract_youtube_id(url) or "unknown"
         )
 
+        needs_subtitles_redownload = False
+
         # 2. Check if the merged file already exists (skip re-download unless
         # subtitles were requested and are not present yet).
         for candidate in _cached_video_candidates(self._output_dir, video_id):
             if candidate.exists() and candidate.stat().st_size > 0:
                 srt_files = _matching_srt_files(candidate)
                 if self._subtitles_lang and not srt_files:
+                    needs_subtitles_redownload = True
                     self._log(
                         f"File exists but subtitles are missing, running yt-dlp: {candidate}"
                     )
@@ -312,6 +315,10 @@ class YtDlpDownloader:
             if downloaded_file is None or downloaded_file.stat().st_size == 0:
                 raise DownloadError(
                     f"yt-dlp exited with code {exit_code}"
+                )
+            if needs_subtitles_redownload and not _matching_srt_files(downloaded_file):
+                raise DownloadError(
+                    f"yt-dlp exited with code {exit_code} and subtitles were not found"
                 )
             self._log(
                 f"yt-dlp exited with code {exit_code} but output file exists, continuing"

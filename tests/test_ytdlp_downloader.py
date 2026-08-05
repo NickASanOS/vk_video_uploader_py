@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from vk_uploader.models import BotDetectionError
+from vk_uploader.models import BotDetectionError, DownloadError
 from vk_uploader.ytdlp_downloader import YtDlpDownloader, _build_env, _find_ytdlp
 
 
@@ -201,6 +201,29 @@ class TestYtDlpDownloader:
 
         assert result.file_path == cached
         mock_popen.assert_called_once()
+
+    def test_nonzero_subtitle_redownload_fails_when_subtitles_remain_missing(
+        self, mocker, tmp_path: Path
+    ):
+        info = {
+            "id": "abc123def45",
+            "title": "V",
+            "description": "",
+            "duration": 0,
+            "uploader": "",
+        }
+        mocker.patch.object(YtDlpDownloader, "_extract_info", return_value=info)
+        cached = tmp_path / "abc123def45.mp4"
+        cached.write_text("fake")
+
+        mock_proc = mocker.MagicMock()
+        mock_proc.stdout = iter(["warning"])
+        mock_proc.wait.return_value = 1
+        mocker.patch("subprocess.Popen", return_value=mock_proc)
+
+        downloader = YtDlpDownloader(output_dir=tmp_path, subtitles_lang="ru")
+        with pytest.raises(DownloadError, match="subtitles were not found"):
+            downloader.download("https://youtube.com/watch?v=abc123def45")
 
     def test_cached_video_ignores_similarly_prefixed_subtitles(
         self, mocker, tmp_path: Path
