@@ -223,6 +223,60 @@ class TestYtDlpDownloader:
         assert result.file_path == cached
         mock_popen.assert_not_called()
 
+    def test_download_fallback_finds_non_default_extension(
+        self, mocker, tmp_path: Path
+    ):
+        info = {
+            "id": "abc123def45",
+            "title": "V",
+            "description": "",
+            "duration": 0,
+            "uploader": "",
+        }
+        mocker.patch.object(YtDlpDownloader, "_extract_info", return_value=info)
+
+        mock_proc = mocker.MagicMock()
+        mock_proc.stdout = iter([])
+        mock_proc.wait.return_value = 0
+
+        def create_file(*args, **kwargs):
+            (tmp_path / "abc123def45.mov").write_text("fake")
+            return mock_proc
+
+        mocker.patch("subprocess.Popen", side_effect=create_file)
+
+        downloader = YtDlpDownloader(output_dir=tmp_path)
+        result = downloader.download("https://youtube.com/watch?v=abc123def45")
+
+        assert result.file_path == tmp_path / "abc123def45.mov"
+
+    def test_nonzero_exit_continues_when_non_default_output_exists(
+        self, mocker, tmp_path: Path
+    ):
+        info = {
+            "id": "abc123def45",
+            "title": "V",
+            "description": "",
+            "duration": 0,
+            "uploader": "",
+        }
+        mocker.patch.object(YtDlpDownloader, "_extract_info", return_value=info)
+
+        mock_proc = mocker.MagicMock()
+        mock_proc.stdout = iter(["warning"])
+        mock_proc.wait.return_value = 1
+
+        def create_file(*args, **kwargs):
+            (tmp_path / "abc123def45.mov").write_text("fake")
+            return mock_proc
+
+        mocker.patch("subprocess.Popen", side_effect=create_file)
+
+        downloader = YtDlpDownloader(output_dir=tmp_path)
+        result = downloader.download("https://youtube.com/watch?v=abc123def45")
+
+        assert result.file_path == tmp_path / "abc123def45.mov"
+
     def test_download_bot_detection_raises_specific_error(self, mocker, tmp_path: Path):
         info = {
             "id": "abc123def45",

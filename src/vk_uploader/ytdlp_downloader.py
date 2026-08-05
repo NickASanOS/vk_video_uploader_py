@@ -113,10 +113,20 @@ def _build_env() -> dict[str, str]:
 
 def _cached_video_candidates(output_dir: Path, video_id: str) -> list[Path]:
     """Return existing cached video files for a YouTube video id."""
-    return sorted(
+    return [
         p for p in output_dir.glob(f"{video_id}.*")
-        if p.suffix.lower() in _VIDEO_CACHE_SUFFIXES
+        if p.is_file() and p.suffix.lower() in _VIDEO_CACHE_SUFFIXES
+    ]
+
+
+def _latest_cached_video(output_dir: Path, video_id: str) -> Path | None:
+    """Return the newest cached video file for a YouTube video id."""
+    files = sorted(
+        _cached_video_candidates(output_dir, video_id),
+        key=lambda f: f.stat().st_mtime,
+        reverse=True,
     )
+    return files[0] if files else None
 
 
 def _deno_path() -> str | None:
@@ -267,12 +277,14 @@ class YtDlpDownloader:
                 raise BotDetectionError(tail)
             # yt-dlp may have created the merged file despite a non-fatal
             # post-processing error (e.g. renaming a leftover .part file).
-            merged_path = self._output_dir / f"{video_id}.mp4"
-            if not merged_path.exists() or merged_path.stat().st_size == 0:
+            downloaded_file = _latest_cached_video(self._output_dir, video_id)
+            if downloaded_file is None or downloaded_file.stat().st_size == 0:
                 raise DownloadError(
                     f"yt-dlp exited with code {exit_code}"
                 )
-            self._log(f"yt-dlp exited with code {exit_code} but merged file exists, continuing")
+            self._log(
+                f"yt-dlp exited with code {exit_code} but output file exists, continuing"
+            )
 
         # 3. Find the downloaded file.
         merged_path = self._output_dir / f"{video_id}.mp4"
@@ -288,19 +300,12 @@ class YtDlpDownloader:
                 video_id=video_id,
             )
 
-        files = sorted(
-            [
-                f for f in self._output_dir.glob(f"{video_id}.*")
-                if f.is_file() and f.suffix.lower() in (".mp4", ".mkv", ".webm")
-            ],
-            key=lambda f: f.stat().st_mtime,
-            reverse=True,
-        )
-        if not files:
+        downloaded_file = _latest_cached_video(self._output_dir, video_id)
+        if downloaded_file is None:
             raise DownloadError("Download completed but no output file found.")
 
         return DownloadResult(
-            file_path=files[0],
+            file_path=downloaded_file,
             title=title,
             description=description,
             thumbnail_url=str(thumbnail_url) if thumbnail_url else None,
