@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 import requests
 
+from vk_uploader.models import UploadError
 from vk_uploader.vk_api import VkApiError, VkClient
 
 
@@ -216,6 +217,52 @@ class TestUploadVideoFile:
             client.upload_video_file("https://upload.vk.com/v", video_file)
         assert "Upload denied" in exc.value.message
 
+    def test_raises_upload_error_on_non_object_upload_response(
+        self, mocker, tmp_path: Path
+    ):
+        video_file = tmp_path / "test.mp4"
+        video_file.write_bytes(b"fake")
+
+        mocker.patch(
+            "vk_uploader.vk_api.requests.post",
+            return_value=make_json_response(["unexpected"]),
+        )
+        client = VkClient("tok")
+
+        with pytest.raises(UploadError, match="expected object"):
+            client.upload_video_file("https://upload.vk.com/v", video_file)
+
+    def test_handles_non_dict_upload_error(self, mocker, tmp_path: Path):
+        video_file = tmp_path / "test.mp4"
+        video_file.write_bytes(b"fake")
+
+        mocker.patch(
+            "vk_uploader.vk_api.requests.post",
+            return_value=make_json_response({"error": "broken"}),
+        )
+        client = VkClient("tok")
+
+        with pytest.raises(VkApiError) as exc:
+            client.upload_video_file("https://upload.vk.com/v", video_file)
+
+        assert exc.value.code == -1
+        assert exc.value.message == "broken"
+
+    def test_raises_upload_error_on_malformed_upload_ids(
+        self, mocker, tmp_path: Path
+    ):
+        video_file = tmp_path / "test.mp4"
+        video_file.write_bytes(b"fake")
+
+        mocker.patch(
+            "vk_uploader.vk_api.requests.post",
+            return_value=make_json_response({"video_id": "bad", "owner_id": 20}),
+        )
+        client = VkClient("tok")
+
+        with pytest.raises(UploadError, match="video_id must be an integer"):
+            client.upload_video_file("https://upload.vk.com/v", video_file)
+
 
 class TestUploadVideoThumbnail:
     def test_upload_thumbnail_flow(self, mocker, tmp_path: Path):
@@ -253,6 +300,76 @@ class TestUploadVideoThumbnail:
             "video.getThumbUploadUrl" in str(c)
             for c in call_mock.call_args_list
         )
+
+    def test_raises_upload_error_on_non_object_thumbnail_upload(
+        self, mocker, tmp_path: Path
+    ):
+        thumb = tmp_path / "thumb.jpg"
+        thumb.write_bytes(b"fake jpg")
+        mocker.patch.object(
+            VkClient,
+            "call_method",
+            return_value={"upload_url": "https://thumb-upload.vk.com/url"},
+        )
+        mocker.patch(
+            "vk_uploader.vk_api.requests.post",
+            return_value=make_json_response(["unexpected"]),
+        )
+
+        client = VkClient("tok")
+        with pytest.raises(UploadError, match="expected object"):
+            client.upload_video_thumbnail(
+                video_id=10, owner_id=-20, thumbnail_path=thumb,
+            )
+
+    def test_handles_non_dict_thumbnail_upload_error(
+        self, mocker, tmp_path: Path
+    ):
+        thumb = tmp_path / "thumb.jpg"
+        thumb.write_bytes(b"fake jpg")
+        mocker.patch.object(
+            VkClient,
+            "call_method",
+            return_value={"upload_url": "https://thumb-upload.vk.com/url"},
+        )
+        mocker.patch(
+            "vk_uploader.vk_api.requests.post",
+            return_value=make_json_response({"error": "broken"}),
+        )
+
+        client = VkClient("tok")
+        with pytest.raises(VkApiError) as exc:
+            client.upload_video_thumbnail(
+                video_id=10, owner_id=-20, thumbnail_path=thumb,
+            )
+
+        assert exc.value.code == -1
+        assert exc.value.message == "broken"
+
+    def test_raises_upload_error_on_non_object_save_uploaded_thumb(
+        self, mocker, tmp_path: Path
+    ):
+        thumb = tmp_path / "thumb.jpg"
+        thumb.write_bytes(b"fake jpg")
+        call_results = iter([
+            {"upload_url": "https://thumb-upload.vk.com/url"},
+            ["unexpected"],
+        ])
+        mocker.patch.object(
+            VkClient,
+            "call_method",
+            side_effect=lambda *a: next(call_results),
+        )
+        mocker.patch(
+            "vk_uploader.vk_api.requests.post",
+            return_value=make_json_response({"photo": "uploaded"}),
+        )
+
+        client = VkClient("tok")
+        with pytest.raises(UploadError, match="expected object"):
+            client.upload_video_thumbnail(
+                video_id=10, owner_id=-20, thumbnail_path=thumb,
+            )
 
 
 class TestGetAlbums:

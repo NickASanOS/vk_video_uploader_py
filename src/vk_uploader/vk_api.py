@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from rich.console import Console
@@ -39,6 +39,29 @@ def _api_error_code(value: Any) -> int:
         return int(str(value))
     except (TypeError, ValueError):
         return -1
+
+
+def _ensure_object(value: Any, context: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise UploadError(f"Invalid response from {context}: expected object")
+    return value
+
+
+def _upload_response_int(data: dict[str, Any], key: str, context: str) -> int:
+    try:
+        return int(data.get(key, 0))
+    except (TypeError, ValueError):
+        raise UploadError(
+            f"Invalid response from {context}: {key} must be an integer"
+        ) from None
+
+
+def _raise_vk_error(raw_error: Any) -> None:
+    err = raw_error if isinstance(raw_error, dict) else {}
+    raise VkApiError(
+        code=_api_error_code(err.get("error_code", -1)),
+        message=str(err.get("error_msg", raw_error)),
+    )
 
 
 class VkApiError(Exception):
@@ -79,12 +102,7 @@ class VkClient:
 
         data: dict[str, Any] = raw_data
         if "error" in data:
-            raw_error = data["error"]
-            err = raw_error if isinstance(raw_error, dict) else {}
-            raise VkApiError(
-                code=_api_error_code(err.get("error_code", -1)),
-                message=str(err.get("error_msg", raw_error)),
-            )
+            _raise_vk_error(data["error"])
 
         if "response" not in data:
             raise VkApiError(
@@ -199,7 +217,7 @@ class VkClient:
                         timeout=600,
                     )
                 resp.raise_for_status()
-                data: dict[str, Any] = resp.json()
+                raw_data: Any = resp.json()
             except requests.RequestException as e:
                 raise UploadError(
                     f"Network error during upload: {e}. "
@@ -210,16 +228,13 @@ class VkClient:
                     f"Invalid JSON from VK upload server: {e}"
                 ) from e
 
+        data = _ensure_object(raw_data, "VK upload server")
         if "error" in data:
-            err = data["error"]
-            raise VkApiError(
-                code=err.get("error_code", -1),
-                message=err.get("error_msg", str(err)),
-            )
+            _raise_vk_error(data["error"])
 
         return UploadResult(
-            video_id=int(data.get("video_id", 0)),
-            owner_id=int(data.get("owner_id", 0)),
+            video_id=_upload_response_int(data, "video_id", "VK upload server"),
+            owner_id=_upload_response_int(data, "owner_id", "VK upload server"),
             raw_response=data,
         )
 
@@ -257,7 +272,7 @@ class VkClient:
                     timeout=60,
                 )
                 upload_resp.raise_for_status()
-                upload_data: dict[str, Any] = upload_resp.json()
+                raw_upload_data: Any = upload_resp.json()
             except requests.RequestException as e:
                 raise UploadError(
                     f"Network error uploading thumbnail: {e}"
@@ -267,12 +282,9 @@ class VkClient:
                     f"Invalid JSON from thumbnail upload: {e}"
                 ) from e
 
+        upload_data = _ensure_object(raw_upload_data, "thumbnail upload")
         if "error" in upload_data:
-            err = upload_data["error"]
-            raise VkApiError(
-                code=err.get("error_code", -1),
-                message=err.get("error_msg", str(err)),
-            )
+            _raise_vk_error(upload_data["error"])
 
         # 3. Apply the uploaded thumbnail to the video.
         result = self.call_method(
@@ -284,7 +296,7 @@ class VkClient:
                 "set_thumb": "1",
             },
         )
-        return cast(dict[str, Any], result)
+        return _ensure_object(result, "video.saveUploadedThumb")
 
 
 def resolve_album(
