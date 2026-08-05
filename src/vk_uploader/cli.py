@@ -806,16 +806,11 @@ def _prompt_browser(console: Console) -> str | None:
     except (EOFError, KeyboardInterrupt):
         return None
 
-    if choice in ("skip", "no", "none", "q", ""):
-        # Empty input with no available browsers means skip.
-        if choice == "" and available:
-            return default
-        if choice == "":
-            return None
-        return None
-
     if choice == "":
-        return default
+        return default if available else None
+
+    if choice in ("skip", "no", "none", "q"):
+        return None
 
     # Validate: must be one of the known browser names.
     if choice in _BROWSER_DIRS:

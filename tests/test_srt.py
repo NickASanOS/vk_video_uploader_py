@@ -176,3 +176,25 @@ class TestTranslateSrtEntries:
         # Individual fallback: each text wrapped in brackets.
         assert result[0].text == "[first]"
         assert result[1].text == "[second]"
+
+    def test_bare_separator_text_does_not_split_batch(self, mocker):
+        """A literal [TSRT] in subtitle text is not the internal separator."""
+        mock_translate = mocker.patch(
+            "vk_uploader.srt.translate_text",
+            side_effect=lambda text, lang: text,
+        )
+        entries = [
+            SRTEntry(
+                index=1,
+                start="00:00:01,000",
+                end="00:00:04,000",
+                text="literal [TSRT] marker",
+            ),
+            SRTEntry(index=2, start="00:00:05,000", end="00:00:08,000", text="second"),
+        ]
+
+        result = translate_srt_entries(entries, "ru")
+
+        assert result[0].text == "literal [TSRT] marker"
+        assert result[1].text == "second"
+        assert mock_translate.call_count == 1

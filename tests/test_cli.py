@@ -365,6 +365,24 @@ class TestCmdSetup:
         assert exc.value.code == 1
 
 
+class TestPromptBrowser:
+    def test_empty_choice_uses_detected_default(self, mocker):
+        from vk_uploader.cli import _prompt_browser
+
+        mocker.patch("vk_uploader.cli._detect_browsers", return_value=["firefox"])
+        mocker.patch("vk_uploader.cli.input", return_value="")
+
+        assert _prompt_browser(mocker.MagicMock()) == "firefox"
+
+    def test_empty_choice_without_detected_browser_skips(self, mocker):
+        from vk_uploader.cli import _prompt_browser
+
+        mocker.patch("vk_uploader.cli._detect_browsers", return_value=[])
+        mocker.patch("vk_uploader.cli.input", return_value="")
+
+        assert _prompt_browser(mocker.MagicMock()) is None
+
+
 # ── Batch mode tests ─────────────────────────────────────────────────────────
 
 

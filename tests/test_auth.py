@@ -213,10 +213,22 @@ class TestVerifyToken:
 
         assert _verify_token("bad-token") is False
 
-    def test_network_error_returns_true(self, mocker):
+    def test_network_error_raises_auth_error(self, mocker):
+        import requests
+
         from vk_uploader.auth import _verify_token
 
-        mocker.patch("requests.post", side_effect=Exception("timeout"))
+        mocker.patch("requests.post", side_effect=requests.ConnectionError("timeout"))
 
-        # Network error — don't invalidate token.
-        assert _verify_token("token") is True
+        with pytest.raises(AuthError, match="Failed to verify VK token"):
+            _verify_token("token")
+
+    def test_invalid_json_raises_auth_error(self, mocker):
+        from vk_uploader.auth import _verify_token
+
+        mock_resp = mocker.MagicMock()
+        mock_resp.json.side_effect = ValueError("bad json")
+        mocker.patch("requests.post", return_value=mock_resp)
+
+        with pytest.raises(AuthError, match="invalid API response"):
+            _verify_token("token")

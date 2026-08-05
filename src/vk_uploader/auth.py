@@ -185,6 +185,7 @@ def _verify_token(token: str) -> bool:
             except (TypeError, ValueError):
                 return True
         return "response" in data
-    except Exception:
-        # Network error — don't invalidate the token, let the main flow handle it.
-        return True
+    except requests.RequestException as e:
+        raise AuthError(f"Failed to verify VK token: network error: {e}") from e
+    except ValueError as e:
+        raise AuthError(f"Failed to verify VK token: invalid API response: {e}") from e

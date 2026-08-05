@@ -109,7 +109,7 @@ def translate_srt_entries(
         translated_text = translate_text(combined, target_lang)
 
         # Split back.
-        parts = translated_text.split(_TSRT_SEP.strip())
+        parts = translated_text.split(_TSRT_SEP)
         if len(parts) == len(batch):
             for e, part in zip(batch, parts, strict=True):
                 translated.append(SRTEntry(e.index, e.start, e.end, part.strip()))

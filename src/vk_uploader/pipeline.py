@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import re
 from pathlib import Path
 
 from rich.console import Console
@@ -19,6 +20,10 @@ from vk_uploader.models import (
 from vk_uploader.vk_api import VkApiError, VkClient
 from vk_uploader.ytdlp_downloader import YtDlpDownloader
 
+_DOWNLOAD_PROGRESS_RE = re.compile(r"\[download\]\s+([\d.]+)%")
+_DOWNLOAD_SPEED_RE = re.compile(r"at\s+(\S+)")
+_DOWNLOAD_ETA_RE = re.compile(r"ETA\s+(\S+)")
+
 
 def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
     """Execute the full download → upload workflow."""
@@ -31,16 +36,14 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
     progress = create_download_progress()
     task_id = progress.add_task("Downloading", total=100)
 
-    import re
-
     def on_progress(d: dict[str, str]) -> None:
         line = d.get("line", "")
         # yt-dlp --newline outputs: [download]  45.2% of 1.2GiB at 5.0MiB/s ETA 02:30
-        m = re.search(r"\[download\]\s+([\d.]+)%", line)
+        m = _DOWNLOAD_PROGRESS_RE.search(line)
         if m:
             pct = float(m.group(1))
-            speed_m = re.search(r"at\s+(\S+)", line)
-            eta_m = re.search(r"ETA\s+(\S+)", line)
+            speed_m = _DOWNLOAD_SPEED_RE.search(line)
+            eta_m = _DOWNLOAD_ETA_RE.search(line)
             parts = [f"{pct:.1f}%"]
             if speed_m:
                 parts.append(f"{speed_m.group(1)}")
@@ -109,54 +112,7 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
     ctx.stage = PipelineStage.DOWNLOAD_COMPLETED
 
     # --- Subtitle processing (optional) ---
-    if config.defaults.subtitles:
-        _log_sub_status = ""
-
-        video_stem = result.file_path.stem
-        srt_files = sorted(result.file_path.parent.glob(f"{video_stem}*.srt"))
-
-        if srt_files:
-            lang = config.defaults.lang
-
-            def _srt_score(p: Path) -> int:
-                parts = p.stem.rsplit(".", 1)
-                code = parts[-1] if len(parts) > 1 else ""
-                if code == lang:
-                    return 3
-                if code.startswith(lang[:2]):
-                    return 2
-                if code.startswith("en"):
-                    return 1
-                return 0
-
-            srt_files.sort(key=_srt_score, reverse=True)
-            best_srt = srt_files[0]
-
-            # Detect language of the best SRT.
-            parts = best_srt.stem.rsplit(".", 1)
-            srt_lang = parts[-1] if len(parts) > 1 else ""
-
-            if srt_lang != lang and not srt_lang.startswith(lang[:2]):
-                # Translate to target language.
-                from vk_uploader.srt import parse_srt, translate_srt_entries, write_srt
-
-                console.print(f"  Translating subtitles {srt_lang} → {lang}...")
-                entries = parse_srt(best_srt)
-                translated = translate_srt_entries(entries, lang)
-                target_srt = result.file_path.with_suffix(f".{lang}.srt")
-                write_srt(translated, target_srt)
-                _log_sub_status = f"translated {srt_lang} → {lang}"
-                # Clean up all raw SRT files downloaded by yt-dlp.
-                for f in srt_files:
-                    f.unlink(missing_ok=True)
-            else:
-                _log_sub_status = f"[green]✓ ({srt_lang})[/green]"
-                # Keep only the target language SRT, clean up the rest.
-                for f in srt_files:
-                    if f != best_srt:
-                        f.unlink(missing_ok=True)
-        else:
-            _log_sub_status = "[yellow]not found[/yellow]"
+    _log_sub_status = _stage_subtitles(console, result.file_path, config)
 
     # --- Translation (optional) ---
     title = ctx.title_override or result.title
@@ -338,18 +294,80 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
 
     # ── Cleanup (optional) ──
     if config.defaults.cleanup_after_upload:
-        console.print()
-        console.print("[dim]Cleaning up downloaded files...[/dim]")
-        # Remove video file.
-        if result.file_path.exists():
-            result.file_path.unlink()
-            console.print(f"  [dim]Removed: {result.file_path.name}[/dim]")
-        # Remove any remaining subtitle files.
-        video_stem = result.file_path.stem
-        for srt_file in sorted(result.file_path.parent.glob(f"{video_stem}*.srt")):
-            srt_file.unlink(missing_ok=True)
-            console.print(f"  [dim]Removed: {srt_file.name}[/dim]")
-        console.print("[green]Cleanup complete.[/green]")
+        _cleanup_downloaded_files(console, result.file_path)
+
+
+def _stage_subtitles(console: Console, video_path: Path, config: AppConfig) -> str:
+    """Translate or prune sidecar SRT files for the downloaded video."""
+    if not config.defaults.subtitles:
+        return ""
+
+    srt_files = _matching_srt_files(video_path)
+    if not srt_files:
+        return "[yellow]not found[/yellow]"
+
+    lang = config.defaults.lang
+    srt_files.sort(key=lambda p: _srt_score(p, lang), reverse=True)
+    best_srt = srt_files[0]
+
+    # Detect language of the best SRT.
+    parts = best_srt.stem.rsplit(".", 1)
+    srt_lang = parts[-1] if len(parts) > 1 else ""
+
+    if srt_lang != lang and not srt_lang.startswith(lang[:2]):
+        from vk_uploader.srt import parse_srt, translate_srt_entries, write_srt
+
+        console.print(f"  Translating subtitles {srt_lang} → {lang}...")
+        entries = parse_srt(best_srt)
+        translated = translate_srt_entries(entries, lang)
+        target_srt = video_path.with_suffix(f".{lang}.srt")
+        write_srt(translated, target_srt)
+        for f in srt_files:
+            f.unlink(missing_ok=True)
+        return f"translated {srt_lang} → {lang}"
+
+    for f in srt_files:
+        if f != best_srt:
+            f.unlink(missing_ok=True)
+    return f"[green]✓ ({srt_lang})[/green]"
+
+
+def _matching_srt_files(video_path: Path) -> list[Path]:
+    """Return SRT sidecars belonging exactly to *video_path*.
+
+    Matches ``abc.srt`` and ``abc.<lang>.srt`` for ``abc.mp4`` but not
+    ``abcd.srt``.
+    """
+    stem = video_path.stem
+    return sorted(
+        p for p in video_path.parent.glob("*.srt")
+        if p.name == f"{stem}.srt" or p.name.startswith(f"{stem}.")
+    )
+
+
+def _srt_score(path: Path, lang: str) -> int:
+    parts = path.stem.rsplit(".", 1)
+    code = parts[-1] if len(parts) > 1 else ""
+    if code == lang:
+        return 3
+    if code.startswith(lang[:2]):
+        return 2
+    if code.startswith("en"):
+        return 1
+    return 0
+
+
+def _cleanup_downloaded_files(console: Console, video_path: Path) -> None:
+    """Remove downloaded video and its SRT sidecars after successful upload."""
+    console.print()
+    console.print("[dim]Cleaning up downloaded files...[/dim]")
+    if video_path.exists():
+        video_path.unlink()
+        console.print(f"  [dim]Removed: {video_path.name}[/dim]")
+    for srt_file in _matching_srt_files(video_path):
+        srt_file.unlink(missing_ok=True)
+        console.print(f"  [dim]Removed: {srt_file.name}[/dim]")
+    console.print("[green]Cleanup complete.[/green]")
 
 
 def _log_stage(console: Console, stage: PipelineStage) -> None:

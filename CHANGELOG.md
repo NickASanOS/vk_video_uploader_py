@@ -17,6 +17,12 @@ All notable changes to vk_uploader.
   token checks.
 - Batch mode now honors command-level `token=` and `group_id=` overrides before
   auth prompts.
+- VK token verification now reports network/API response failures explicitly
+  instead of treating them as a valid token.
+- Subtitle sidecar matching no longer picks up files from similarly prefixed
+  videos.
+- SRT batch translation now splits on the full internal separator, avoiding false
+  splits on literal `[TSRT]` text.
 - YouTube bot detection during the download subprocess now triggers the same
   browser-cookie retry path as metadata extraction.
 - Cached video files no longer block subtitle download when subtitles are newly
