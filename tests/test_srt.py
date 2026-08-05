@@ -36,6 +36,19 @@ class TestParseSrt:
         assert entries[0].text == "Line one\nLine two"
         assert entries[1].text == "Line three"
 
+    def test_parses_crlf_srt(self, tmp_path: Path):
+        p = tmp_path / "crlf.srt"
+        p.write_text(
+            "1\r\n00:00:01,000 --> 00:00:04,000\r\nLine one\r\nLine two\r\n\r\n"
+            "2\r\n00:00:05,000 --> 00:00:08,000\r\nLine three\r\n\r\n"
+        )
+
+        entries = parse_srt(p)
+
+        assert len(entries) == 2
+        assert entries[0].text == "Line one\nLine two"
+        assert entries[1].text == "Line three"
+
     def test_parses_empty_file(self, tmp_path: Path):
         p = tmp_path / "empty.srt"
         p.write_text("\n\n")

@@ -20,16 +20,17 @@ class SRTEntry:
 _TIMESTAMP_RE = re.compile(
     r"(\d{2}:\d{2}:\d{2},\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2},\d{3})"
 )
+_BLOCK_SEPARATOR_RE = re.compile(r"(?:\r?\n){2,}")
 
 
 def parse_srt(file_path: Path) -> list[SRTEntry]:
     """Parse an SRT file into a list of SRTEntry objects."""
     content = file_path.read_text(encoding="utf-8")
-    blocks = content.strip().split("\n\n")
+    blocks = _BLOCK_SEPARATOR_RE.split(content.strip())
     entries: list[SRTEntry] = []
 
     for block in blocks:
-        lines = block.strip().split("\n")
+        lines = block.strip().splitlines()
         if len(lines) < 2:
             continue
 

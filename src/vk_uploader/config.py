@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import os
 import stat
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
@@ -96,9 +97,9 @@ class ConfigFile:
         return normalize_path(config.download.output_dir)
 
     def _dict_to_config(self, data: dict[str, Any]) -> AppConfig:
-        vk_data = data.get("vk", {})
-        defaults_data = data.get("defaults", {})
-        download_data = data.get("download", {})
+        vk_data = _config_section(data, "vk")
+        defaults_data = _config_section(data, "defaults")
+        download_data = _config_section(data, "download")
 
         vk = VkConfig(
             access_token=str(vk_data.get("access_token") or ""),
@@ -129,9 +130,22 @@ class ConfigFile:
             ) from e
         download = DownloadConfig(
             output_dir=normalize_config_path(str(download_data.get("output_dir", "~/Downloads"))),
-            video_format=str(download_data.get("video_format", "bv*+ba/b")),
+            video_format=str(
+                download_data.get("video_format", DownloadConfig().video_format)
+            ),
         )
         return AppConfig(vk=vk, defaults=defaults, download=download)
+
+
+def _config_section(data: dict[str, Any], name: str) -> dict[str, Any]:
+    section = data.get(name, {})
+    if section is None:
+        return {}
+    if not isinstance(section, Mapping):
+        raise ConfigError(
+            f"Config section {name!r} must be a mapping, got: {type(section).__name__}"
+        )
+    return dict(section)
 
 
 def normalize_config_path(value: str) -> str:

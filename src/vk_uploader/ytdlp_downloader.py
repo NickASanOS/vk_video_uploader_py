@@ -129,6 +129,35 @@ def _latest_cached_video(output_dir: Path, video_id: str) -> Path | None:
     return files[0] if files else None
 
 
+def _matching_srt_files(video_path: Path) -> list[Path]:
+    """Return SRT sidecars belonging exactly to *video_path*."""
+    stem = video_path.stem
+    plain = video_path.parent / f"{stem}.srt"
+    matches = [plain] if plain.is_file() else []
+    matches.extend(
+        p for p in video_path.parent.glob(f"{stem}.*.srt")
+        if p.is_file()
+    )
+    return matches
+
+
+def _metadata_str(info: dict[str, Any], key: str, default: str = "") -> str:
+    value = info.get(key)
+    if value is None:
+        return default
+    return str(value)
+
+
+def _metadata_int(info: dict[str, Any], key: str, default: int = 0) -> int:
+    value = info.get(key)
+    if value is None:
+        return default
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return default
+
+
 def _deno_path() -> str | None:
     """Return the path to deno if available."""
     for loc in [
@@ -186,18 +215,20 @@ class YtDlpDownloader:
         # 1. Extract metadata (no download).
         info = self._extract_info(url)
 
-        title = str(info.get("title", "Untitled"))
-        description = str(info.get("description", ""))
+        title = _metadata_str(info, "title", "Untitled")
+        description = _metadata_str(info, "description")
         thumbnail_url = info.get("thumbnail")
-        duration = int(str(info.get("duration", 0)))
-        uploader = str(info.get("uploader", ""))
-        video_id = str(info.get("id", _extract_youtube_id(url) or "unknown"))
+        duration = _metadata_int(info, "duration")
+        uploader = _metadata_str(info, "uploader")
+        video_id = _metadata_str(
+            info, "id", _extract_youtube_id(url) or "unknown"
+        )
 
         # 2. Check if the merged file already exists (skip re-download unless
         # subtitles were requested and are not present yet).
         for candidate in _cached_video_candidates(self._output_dir, video_id):
             if candidate.exists() and candidate.stat().st_size > 0:
-                srt_files = list(candidate.parent.glob(f"{candidate.stem}*.srt"))
+                srt_files = _matching_srt_files(candidate)
                 if self._subtitles_lang and not srt_files:
                     self._log(
                         f"File exists but subtitles are missing, running yt-dlp: {candidate}"

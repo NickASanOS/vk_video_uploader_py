@@ -22,6 +22,10 @@ class TestParseArgs:
         assert url == "https://youtube.com/watch?v=abc"
         assert overrides == {}
 
+    def test_empty_ylink_raises_usage_error(self):
+        with pytest.raises(UsageError, match="YouTube URL is required"):
+            parse_args(["ylink="])
+
     def test_mixed_overrides(self):
         url, overrides = parse_args([
             "https://youtube.com/watch?v=abc",
@@ -415,6 +419,12 @@ class TestParseLineArgs:
         )
         assert url == "https://youtube.com/watch?v=abc"
         assert ov == {"wallpost": "true"}
+
+    def test_empty_ylink_raises(self):
+        from vk_uploader.cli import _parse_line_args
+
+        with pytest.raises(UsageError, match="f.txt:1.*YouTube URL is required"):
+            _parse_line_args("ylink=", "f.txt", 1)
 
     def test_quoted_title(self):
         from vk_uploader.cli import _parse_line_args

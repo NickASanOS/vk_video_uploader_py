@@ -40,6 +40,15 @@ All notable changes to vk_uploader.
   of a traceback.
 - Thumbnail download retries no longer hide unexpected programming errors.
 - Cached yt-dlp downloads are now detected across common video file extensions.
+- Cached video subtitle checks no longer treat similarly prefixed SRT files as
+  subtitles for the current video.
+- Empty `ylink=` values now fail early with a usage error.
+- SRT parsing now handles CRLF subtitle files.
+- yt-dlp metadata normalization now tolerates missing or `null` fields.
+- Invalid non-mapping config sections now raise `ConfigError`; `null` sections
+  are treated as empty.
+- Missing `download.video_format` in config now uses the same default as the
+  application model.
 
 ### Changed
 - Subtitle download now requests the target language plus English fallback

@@ -97,6 +97,8 @@ def parse_args(argv: list[str]) -> tuple[str, dict[str, str]]:
             if key == "ylink":
                 if url is not None:
                     raise UsageError("URL specified both positionally and as ylink=...")
+                if not value:
+                    raise UsageError("YouTube URL is required.")
                 url = value
             elif key in _VALID_OVERRIDES:
                 overrides[key] = value
@@ -582,6 +584,8 @@ def _parse_line_args(
                     f"{path}:{line_num}: URL specified both"
                     " positionally and as ylink=..."
                 )
+            if not value:
+                raise UsageError(f"{path}:{line_num}: YouTube URL is required")
             url = value
         elif key in _VALID_OVERRIDES:
             overrides[key] = value

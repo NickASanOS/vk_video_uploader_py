@@ -202,6 +202,63 @@ class TestYtDlpDownloader:
         assert result.file_path == cached
         mock_popen.assert_called_once()
 
+    def test_cached_video_ignores_similarly_prefixed_subtitles(
+        self, mocker, tmp_path: Path
+    ):
+        info = {
+            "id": "abc123def45",
+            "title": "V",
+            "description": "",
+            "duration": 0,
+            "uploader": "",
+        }
+        mocker.patch.object(YtDlpDownloader, "_extract_info", return_value=info)
+        cached = tmp_path / "abc123def45.mp4"
+        cached.write_text("fake")
+        (tmp_path / "abc123def456.en.srt").write_text("wrong")
+
+        mock_popen = mocker.patch("subprocess.Popen")
+        mock_proc = mocker.MagicMock()
+        mock_proc.stdout = iter([])
+        mock_proc.wait.return_value = 0
+        mock_popen.return_value = mock_proc
+
+        downloader = YtDlpDownloader(output_dir=tmp_path, subtitles_lang="ru")
+        result = downloader.download("https://youtube.com/watch?v=abc123def45")
+
+        assert result.file_path == cached
+        mock_popen.assert_called_once()
+
+    def test_download_handles_none_metadata_values(self, mocker, tmp_path: Path):
+        info = {
+            "id": None,
+            "title": None,
+            "description": None,
+            "thumbnail": None,
+            "duration": None,
+            "uploader": None,
+        }
+        mocker.patch.object(YtDlpDownloader, "_extract_info", return_value=info)
+
+        mock_proc = mocker.MagicMock()
+        mock_proc.stdout = iter([])
+        mock_proc.wait.return_value = 0
+
+        def create_file(*args, **kwargs):
+            (tmp_path / "abc123def45.mp4").write_text("fake")
+            return mock_proc
+
+        mocker.patch("subprocess.Popen", side_effect=create_file)
+
+        downloader = YtDlpDownloader(output_dir=tmp_path)
+        result = downloader.download("https://youtube.com/watch?v=abc123def45")
+
+        assert result.video_id == "abc123def45"
+        assert result.title == "Untitled"
+        assert result.description == ""
+        assert result.duration == 0
+        assert result.uploader == ""
+
     def test_cached_video_with_non_default_extension_is_reused(
         self, mocker, tmp_path: Path
     ):

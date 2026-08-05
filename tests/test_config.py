@@ -222,6 +222,29 @@ def test_yaml_null_becomes_empty_string(tmp_path: Path):
     assert config.vk.app_id == ""
 
 
+def test_null_config_sections_are_treated_as_empty(tmp_path: Path):
+    p = tmp_path / CONFIG_FILENAME
+    p.write_text(yaml.safe_dump({"vk": None, "defaults": None, "download": None}))
+
+    cfg = ConfigFile(config_dir=str(tmp_path), filename=CONFIG_FILENAME)
+    config = cfg.load()
+
+    assert config == AppConfig()
+
+
+@pytest.mark.parametrize("section", ["vk", "defaults", "download"])
+def test_non_mapping_config_section_raises_config_error(
+    tmp_path: Path, section: str
+):
+    p = tmp_path / CONFIG_FILENAME
+    p.write_text(yaml.safe_dump({section: []}))
+
+    cfg = ConfigFile(config_dir=str(tmp_path), filename=CONFIG_FILENAME)
+
+    with pytest.raises(ConfigError, match=f"Config section '{section}'"):
+        cfg.load()
+
+
 def test_invalid_bool_in_yaml_raises_config_error(tmp_path: Path):
     """YAML string \"false\" is handled by parse_bool, but arbitrary strings raise ConfigError."""
     p = tmp_path / CONFIG_FILENAME
