@@ -198,12 +198,10 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
 
     thumb_url: str | None = None
     if ctx.thumbnail_enabled:
-        # Build priority list: lang-specific → neutral → yt-dlp fallback.
-        if result.video_id:
-            lang = config.defaults.lang
-            thumb_url = f"https://img.youtube.com/vi/{result.video_id}/maxresdefault_{lang}.jpg"
-        elif result.thumbnail_url:
+        if result.thumbnail_url:
             thumb_url = result.thumbnail_url
+        elif result.video_id:
+            thumb_url = f"https://img.youtube.com/vi/{result.video_id}/maxresdefault.jpg"
 
         if thumb_url:
             console.print(f"  Thumbnail: [dim]{thumb_url}[/dim]")
@@ -275,12 +273,11 @@ def run_pipeline(console: Console, ctx: JobContext, config: AppConfig) -> None:
 
         from vk_uploader.thumbnail import download_thumbnail
 
-        # Build fallback chain: lang-specific → yt-dlp → neutral.
+        # Build fallback chain: yt-dlp metadata → neutral YouTube maxres.
         urls_to_try = [thumb_url]
         if result.thumbnail_url and result.thumbnail_url not in urls_to_try:
             urls_to_try.append(result.thumbnail_url)
         if result.video_id:
-            lang = config.defaults.lang
             neutral_url = f"https://img.youtube.com/vi/{result.video_id}/maxresdefault.jpg"
             if neutral_url not in urls_to_try:
                 urls_to_try.append(neutral_url)

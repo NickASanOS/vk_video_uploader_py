@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from vk_uploader.models import BotDetectionError
 from vk_uploader.ytdlp_downloader import YtDlpDownloader, _find_ytdlp
 
 
@@ -26,6 +27,7 @@ class TestYtDlpDownloader:
 
     def test_download_returns_result(self, mocker, tmp_path: Path):
         info = {
+            "id": "abc123def45",
             "title": "Test Video",
             "description": "A test description",
             "thumbnail": "https://i.ytimg.com/thumb.jpg",
@@ -43,7 +45,7 @@ class TestYtDlpDownloader:
         mocker.patch("subprocess.Popen", return_value=mock_proc)
 
         # Create a fake output file.
-        out_file = tmp_path / "Test Video.mp4"
+        out_file = tmp_path / "abc123def45.mp4"
         out_file.write_text("fake data")
 
         downloader = YtDlpDownloader(output_dir=tmp_path)
@@ -84,7 +86,13 @@ class TestYtDlpDownloader:
         assert result == info
 
     def test_subtitles_args_present_when_lang_set(self, mocker, tmp_path: Path):
-        info = {"title": "V", "description": "", "duration": 0, "uploader": ""}
+        info = {
+            "id": "abc123def45",
+            "title": "V",
+            "description": "",
+            "duration": 0,
+            "uploader": "",
+        }
         mocker.patch.object(YtDlpDownloader, "_extract_info", return_value=info)
 
         mock_popen = mocker.patch("subprocess.Popen")
@@ -93,7 +101,7 @@ class TestYtDlpDownloader:
         mock_proc.wait.return_value = 0
 
         def create_file(*args, **kwargs):
-            (tmp_path / "V.mp4").write_text("fake")
+            (tmp_path / "abc123def45.mp4").write_text("fake")
             return mock_proc
         mock_popen.side_effect = create_file
 
@@ -106,10 +114,16 @@ class TestYtDlpDownloader:
         assert "--sub-langs" in args
         assert "--convert-subs" in args
         idx = args.index("--sub-langs")
-        assert args[idx + 1] == "ru"
+        assert args[idx + 1] == "ru,ru.*,en,en.*"
 
     def test_subtitles_args_absent_when_lang_none(self, mocker, tmp_path: Path):
-        info = {"title": "V", "description": "", "duration": 0, "uploader": ""}
+        info = {
+            "id": "abc123def45",
+            "title": "V",
+            "description": "",
+            "duration": 0,
+            "uploader": "",
+        }
         mocker.patch.object(YtDlpDownloader, "_extract_info", return_value=info)
 
         mock_popen = mocker.patch("subprocess.Popen")
@@ -118,7 +132,7 @@ class TestYtDlpDownloader:
         mock_proc.wait.return_value = 0
 
         def create_file(*args, **kwargs):
-            (tmp_path / "V.mp4").write_text("fake")
+            (tmp_path / "abc123def45.mp4").write_text("fake")
             return mock_proc
         mock_popen.side_effect = create_file
 
@@ -128,3 +142,46 @@ class TestYtDlpDownloader:
         args = mock_popen.call_args[0][0]
         assert "--write-subs" not in args
         assert "--write-auto-subs" not in args
+
+    def test_cached_video_still_downloads_missing_subtitles(self, mocker, tmp_path: Path):
+        info = {
+            "id": "abc123def45",
+            "title": "V",
+            "description": "",
+            "duration": 0,
+            "uploader": "",
+        }
+        mocker.patch.object(YtDlpDownloader, "_extract_info", return_value=info)
+        cached = tmp_path / "abc123def45.mp4"
+        cached.write_text("fake")
+
+        mock_popen = mocker.patch("subprocess.Popen")
+        mock_proc = mocker.MagicMock()
+        mock_proc.stdout = iter([])
+        mock_proc.wait.return_value = 0
+        mock_popen.return_value = mock_proc
+
+        downloader = YtDlpDownloader(output_dir=tmp_path, subtitles_lang="ru")
+        result = downloader.download("https://youtube.com/watch?v=abc123def45")
+
+        assert result.file_path == cached
+        mock_popen.assert_called_once()
+
+    def test_download_bot_detection_raises_specific_error(self, mocker, tmp_path: Path):
+        info = {
+            "id": "abc123def45",
+            "title": "V",
+            "description": "",
+            "duration": 0,
+            "uploader": "",
+        }
+        mocker.patch.object(YtDlpDownloader, "_extract_info", return_value=info)
+
+        mock_proc = mocker.MagicMock()
+        mock_proc.stdout = iter(["ERROR: Sign in to confirm you're not a bot"])
+        mock_proc.wait.return_value = 1
+        mocker.patch("subprocess.Popen", return_value=mock_proc)
+
+        downloader = YtDlpDownloader(output_dir=tmp_path)
+        with pytest.raises(BotDetectionError):
+            downloader.download("https://youtube.com/watch?v=abc123def45")

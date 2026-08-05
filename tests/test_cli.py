@@ -182,6 +182,67 @@ class TestMain:
         main()
         mock_pipeline.assert_called_once()
 
+    def test_token_override_skips_oauth_and_reaches_pipeline(self, mocker):
+        """token= is a one-shot override and should not trigger config OAuth."""
+        from pathlib import Path
+
+        from vk_uploader.models import AppConfig, DownloadConfig, VkConfig
+
+        config = AppConfig(
+            vk=VkConfig(access_token="", group_id="456", app_id="123"),
+            download=DownloadConfig(),
+        )
+
+        mocker.patch.object(
+            sys,
+            "argv",
+            ["vk_uploader", "https://youtube.com/watch?v=abc", "token=cli-token"],
+        )
+        mocker.patch("vk_uploader.cli.create_console")
+        mock_cf = mocker.MagicMock()
+        mock_cf.load.return_value = config
+        mock_cf.resolve_output_dir.return_value = Path("/tmp/videos")
+        mocker.patch("vk_uploader.cli.ConfigFile", return_value=mock_cf)
+        mock_ensure = mocker.patch("vk_uploader.auth.ensure_token")
+        mock_pipeline = mocker.patch("vk_uploader.cli.run_pipeline")
+
+        main()
+
+        mock_ensure.assert_not_called()
+        passed_config = mock_pipeline.call_args.args[2]
+        assert passed_config.vk.access_token == "cli-token"
+
+    def test_group_override_skips_group_prompt_in_auth(self, mocker):
+        """group_id= should satisfy upload validation without being requested in setup."""
+        from pathlib import Path
+
+        from vk_uploader.models import AppConfig, DownloadConfig, VkConfig
+
+        config = AppConfig(
+            vk=VkConfig(access_token="tok", group_id="", app_id="123"),
+            download=DownloadConfig(),
+        )
+
+        mocker.patch.object(
+            sys,
+            "argv",
+            ["vk_uploader", "https://youtube.com/watch?v=abc", "group_id=999"],
+        )
+        mocker.patch("vk_uploader.cli.create_console")
+        mock_cf = mocker.MagicMock()
+        mock_cf.load.return_value = config
+        mock_cf.resolve_output_dir.return_value = Path("/tmp/videos")
+        mocker.patch("vk_uploader.cli.ConfigFile", return_value=mock_cf)
+        mock_ensure = mocker.patch("vk_uploader.auth.ensure_token")
+        mock_pipeline = mocker.patch("vk_uploader.cli.run_pipeline")
+
+        main()
+
+        mock_ensure.assert_called_once()
+        assert mock_ensure.call_args.kwargs["require_group"] is False
+        ctx = mock_pipeline.call_args.args[1]
+        assert ctx.group_id == "999"
+
 
 class TestCmdSetup:
     def test_complete_config_prints_summary(self, mocker):

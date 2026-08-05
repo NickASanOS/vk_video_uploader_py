@@ -86,7 +86,13 @@ def run_oauth_flow(app_id: str) -> AuthResult:
     )
 
 
-def ensure_token(console: Console, config_file: ConfigFile, config: AppConfig) -> None:
+def ensure_token(
+    console: Console,
+    config_file: ConfigFile,
+    config: AppConfig,
+    *,
+    require_group: bool = True,
+) -> None:
     """Check token validity; if missing, expired, or invalid, run OAuth flow and save."""
     from datetime import datetime
 
@@ -139,6 +145,9 @@ def ensure_token(console: Console, config_file: ConfigFile, config: AppConfig) -
         config.vk.user_id = result.user_id
         config_file.save(config)
         console.print("[green]Token saved to config.[/green]")
+
+    if not require_group:
+        return
 
     # --- Group ID ---
     group_id = config.vk.group_id.strip()

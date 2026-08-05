@@ -51,6 +51,7 @@ src/vk_uploader/
 ├── ytdlp_downloader.py # yt-dlp wrapper (standalone binary)
 ├── thumbnail.py        # Thumbnail download helper
 ├── translate.py        # Translation via deep-translator
+├── srt.py              # SRT parsing, writing, and translation
 ├── pipeline.py         # Download → translate → upload orchestration
 └── logging_setup.py    # Rich console setup
 
@@ -58,6 +59,7 @@ tests/
 ├── test_auth.py
 ├── test_cli.py
 ├── test_config.py
+├── test_srt.py
 ├── test_thumbnail.py
 ├── test_translate.py
 ├── test_vk_api.py
@@ -73,3 +75,6 @@ tests/
 | `make lint` | Run ruff only |
 | `make lint-fix` | Auto-fix lint issues |
 | `make typecheck` | Run mypy only |
+
+CI runs the same lint, typecheck, and test checks on GitHub Actions. The test
+job runs on Python 3.11, 3.12, and 3.13.

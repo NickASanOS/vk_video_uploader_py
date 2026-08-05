@@ -117,14 +117,20 @@ def main() -> None:
         config_file = ConfigFile()
         config = config_file.load()
 
-        # --- Auth (may reload config — apply overrides AFTER) ---
+        # --- Auth (may reload config; one-shot token= must not be persisted) ---
         from vk_uploader.auth import ensure_token
 
-        old_token = config.vk.access_token
-        ensure_token(console, config_file, config)
-        # Only reload if the token was changed (avoids wiping CLI overrides).
-        if config.vk.access_token != old_token:
-            config = config_file.load()
+        if "token" not in overrides:
+            old_token = config.vk.access_token
+            ensure_token(
+                console,
+                config_file,
+                config,
+                require_group="group_id" not in overrides,
+            )
+            # Only reload if the token was changed (avoids wiping CLI overrides).
+            if config.vk.access_token != old_token:
+                config = config_file.load()
 
         # --- Merge CLI overrides onto config (after potential reload) ---
         _apply_overrides(config, overrides)

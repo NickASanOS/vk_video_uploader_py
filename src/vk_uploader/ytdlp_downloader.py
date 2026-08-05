@@ -15,6 +15,11 @@ from urllib.parse import parse_qs, urlparse
 from vk_uploader.models import BotDetectionError, DownloadError, DownloadResult
 
 _YT_ID_RE = re.compile(r"([\w-]{11})")
+_BOT_DETECTION_MARKERS = (
+    "Sign in to confirm",
+    "confirm you're not a bot",
+    "This helps protect our community",
+)
 
 
 def _extract_youtube_id(url: str) -> str | None:
@@ -103,6 +108,22 @@ def _deno_path() -> str | None:
     return found
 
 
+def _looks_like_bot_detection(output: str) -> bool:
+    """Return True when yt-dlp output indicates YouTube bot detection."""
+    return any(marker.lower() in output.lower() for marker in _BOT_DETECTION_MARKERS)
+
+
+def _subtitle_langs_arg(target_lang: str) -> str:
+    """Build a yt-dlp subtitle language selector with an English fallback."""
+    lang = target_lang.strip()
+    if not lang:
+        return ""
+    targets = [lang, f"{lang}.*"]
+    if not lang.lower().startswith("en"):
+        targets.extend(["en", "en.*"])
+    return ",".join(targets)
+
+
 class YtDlpDownloader:
     """Wraps the standalone yt-dlp binary for downloading YouTube videos."""
 
@@ -138,10 +159,17 @@ class YtDlpDownloader:
         uploader = str(info.get("uploader", ""))
         video_id = str(info.get("id", _extract_youtube_id(url) or "unknown"))
 
-        # 2. Check if the merged file already exists (skip re-download).
+        # 2. Check if the merged file already exists (skip re-download unless
+        # subtitles were requested and are not present yet).
         for ext in (".mp4", ".mkv", ".webm"):
             candidate = self._output_dir / f"{video_id}{ext}"
             if candidate.exists() and candidate.stat().st_size > 0:
+                srt_files = list(candidate.parent.glob(f"{candidate.stem}*.srt"))
+                if self._subtitles_lang and not srt_files:
+                    self._log(
+                        f"File exists but subtitles are missing, running yt-dlp: {candidate}"
+                    )
+                    break
                 self._log(f"Skipping download — file exists: {candidate}")
                 return DownloadResult(
                     file_path=candidate,
@@ -166,10 +194,11 @@ class YtDlpDownloader:
             "--no-playlist",
         ]
         if self._subtitles_lang:
+            sub_langs = _subtitle_langs_arg(self._subtitles_lang)
             args += [
                 "--write-subs",
                 "--write-auto-subs",
-                "--sub-langs", self._subtitles_lang,
+                "--sub-langs", sub_langs,
                 "--convert-subs", "srt",
             ]
         if self._cookies_from_browser:
@@ -198,14 +227,21 @@ class YtDlpDownloader:
             raise DownloadError(f"yt-dlp binary not found at {self._binary}") from None
 
         assert proc.stdout is not None
+        output_tail: list[str] = []
         for line in proc.stdout:
             line = line.rstrip("\n")
+            output_tail.append(line)
+            if len(output_tail) > 40:
+                output_tail.pop(0)
             self._log(line)
             if self._on_progress:
                 self._on_progress({"line": line})
 
         exit_code = proc.wait()
         if exit_code != 0:
+            tail = "\n".join(output_tail)
+            if _looks_like_bot_detection(tail):
+                raise BotDetectionError(tail)
             # yt-dlp may have created the merged file despite a non-fatal
             # post-processing error (e.g. renaming a leftover .part file).
             merged_path = self._output_dir / f"{video_id}.mp4"
@@ -226,23 +262,22 @@ class YtDlpDownloader:
                 duration=duration,
                 uploader=uploader,
                 webpage_url=url,
-                video_id=_extract_youtube_id(url),
+                video_id=video_id,
             )
 
         files = sorted(
-            [f for f in self._output_dir.iterdir() if f.is_file()],
+            [
+                f for f in self._output_dir.glob(f"{video_id}.*")
+                if f.is_file() and f.suffix.lower() in (".mp4", ".mkv", ".webm")
+            ],
             key=lambda f: f.stat().st_mtime,
             reverse=True,
         )
-        candidates = [f for f in files if f.suffix.lower() in (".mp4", ".mkv", ".webm")]
-        if not candidates:
-            candidates = files
-
-        if not candidates:
+        if not files:
             raise DownloadError("Download completed but no output file found.")
 
         return DownloadResult(
-            file_path=candidates[0],
+            file_path=files[0],
             title=title,
             description=description,
             thumbnail_url=str(thumbnail_url) if thumbnail_url else None,
@@ -275,10 +310,10 @@ class YtDlpDownloader:
             raise DownloadError(f"yt-dlp binary not found at {self._binary}") from None
 
         if result.returncode != 0:
-            stderr = result.stderr.strip()
-            if "Sign in to confirm" in stderr:
-                raise BotDetectionError(stderr)
-            raise DownloadError(f"yt-dlp metadata failed: {stderr}")
+            output = "\n".join(part.strip() for part in (result.stderr, result.stdout) if part)
+            if _looks_like_bot_detection(output):
+                raise BotDetectionError(output)
+            raise DownloadError(f"yt-dlp metadata failed: {output}")
 
         try:
             info: dict[str, Any] = json.loads(result.stdout)

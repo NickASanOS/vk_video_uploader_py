@@ -96,9 +96,9 @@ vk_uploader <url> thumbnail=false publish_delay_hours=48 output_dir=/tmp/videos
 | `thumbnail=` | bool | `true` | Download and upload YouTube thumbnail |
 | `publish_delay_hours=` | int | `24` | Hours to delay publication |
 | `output_dir=` | path | `~/Downloads` | Download directory |
-| `video_format=` | str | `bv*+ba/b` | yt-dlp format string |
-| `token=` | str | — | VK access token (override config) |
-| `group_id=` | str | — | VK community ID |
+| `video_format=` | str | `bv*+ba[ext=m4a]/bv*+ba/b` | yt-dlp format string |
+| `token=` | str | — | VK access token (one-run override; not saved to config) |
+| `group_id=` | str | — | VK community ID (override config) |
 | `wallpost=` | bool | `false` | Publish to community wall |
 | `translation=` | bool | `false` | Translate title/description |
 | `lang=` | str | — | Target language — **required** when `translation=true` or `subtitles=true` |
@@ -111,8 +111,10 @@ vk_uploader <url> thumbnail=false publish_delay_hours=48 output_dir=/tmp/videos
 If `translation=true` or `subtitles=true` is set, `lang=<code>` must also be provided
 (e.g. `lang=ru`, `lang=en`). The tool will exit with an error if `lang` is missing.
 
-Subtitles are downloaded as `.srt` files and translated to the target language,
-but are **not uploaded to VK** (VK API does not support SRT subtitle upload).
+Subtitles are downloaded as `.srt` files. The downloader asks yt-dlp for the target
+language first and English as a fallback; if the best available subtitle is not in
+the target language, it is translated locally to `lang=<code>`.
+Subtitles are **not uploaded to VK** (VK API does not support SRT subtitle upload).
 
 ## Config file
 
@@ -137,8 +139,16 @@ defaults:
 
 download:
   output_dir: "~/Downloads"
-  video_format: "bv*+ba/b"
+  video_format: "bv*+ba[ext=m4a]/bv*+ba/b"
 ```
+
+## CI
+
+GitHub Actions runs on pushes and pull requests to `main`:
+
+- `ruff check src/ tests/`
+- `mypy src/`
+- `pytest tests/ -v` on Python 3.11, 3.12, and 3.13
 
 ## Development
 

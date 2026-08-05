@@ -2,6 +2,28 @@
 
 All notable changes to vk_uploader.
 
+## Unreleased
+
+### Fixed
+- `token=` now works as a one-run CLI override without triggering OAuth or saving
+  the token to config.
+- `group_id=` CLI overrides now satisfy upload validation without prompting during
+  token checks.
+- YouTube bot detection during the download subprocess now triggers the same
+  browser-cookie retry path as metadata extraction.
+- Cached video files no longer block subtitle download when subtitles are newly
+  requested.
+- Downloader output selection is now limited to files matching the current
+  YouTube video id, avoiding accidental uploads of unrelated files from the output
+  directory.
+- Thumbnail fallback no longer starts with a non-existent language-suffixed
+  YouTube maxres URL.
+
+### Changed
+- Subtitle download now requests the target language plus English fallback
+  variants, allowing the pipeline to translate fallback subtitles to the target
+  language when needed.
+
 ## [0.0.7] — 2026-05-22
 
 ### Added
