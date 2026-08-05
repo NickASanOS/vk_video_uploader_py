@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 
-def translate_text(text: str, target_lang: str) -> str:
+
+def translate_text(
+    text: str,
+    target_lang: str,
+    on_error: Callable[[Exception], None] | None = None,
+) -> str:
     """Translate *text* to *target_lang* using Google Translate.
 
     Requires no API key. The deep-translator library queries Google
@@ -25,7 +31,9 @@ def translate_text(text: str, target_lang: str) -> str:
         chunks = _split_text(text, 4900)
         translated = [str(translator.translate(chunk)) for chunk in chunks]
         return " ".join(translated)
-    except Exception:
+    except Exception as e:
+        if on_error is not None:
+            on_error(e)
         # If translation fails for any reason, return the original text
         # so the pipeline continues without breaking.
         return text

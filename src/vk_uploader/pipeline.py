@@ -149,7 +149,6 @@ def _stage_download(
         return None
 
     ctx.download_result = result
-    progress.stop()
     console.print(f"[green]Downloaded:[/green] {result.file_path}")
     console.print(f"  Title: {result.title}")
     if result.description:
@@ -176,11 +175,23 @@ def _stage_translate_metadata(
 
     from vk_uploader.translate import translate_text
 
-    translated_title = translate_text(title, lang)
+    warned = False
+
+    def on_translation_error(error: Exception) -> None:
+        nonlocal warned
+        if warned:
+            return
+        warned = True
+        console.print(f"  [yellow]Translation failed (non-fatal): {error}[/yellow]")
+
+    translated_title = translate_text(title, lang, on_error=on_translation_error)
     if translated_title != title:
         console.print(f"  Title: [dim]{translated_title}[/dim]")
 
-    translated_description = translate_text(description, lang) if description else ""
+    translated_description = (
+        translate_text(description, lang, on_error=on_translation_error)
+        if description else ""
+    )
     if translated_description != description:
         console.print(f"  Description: [dim]{translated_description[:120]}...[/dim]")
 
@@ -289,7 +300,6 @@ def _stage_video_upload(
         return None
 
     ctx.upload_result = upload_result
-    upload_progress.stop()
     console.print("[green]Video uploaded.[/green]")
     console.print(f"  video_id: {upload_result.video_id}, owner_id: {upload_result.owner_id}")
     return upload_result
@@ -324,7 +334,7 @@ def _stage_thumbnail_upload(
         try:
             local_thumb = download_thumbnail(url, ctx.output_dir)
             break
-        except (UploadError, Exception):
+        except UploadError:
             continue
 
     if local_thumb is None:

@@ -197,12 +197,14 @@ class TestEnsureToken:
 class TestVerifyToken:
     def test_valid_token_returns_true(self, mocker):
         from vk_uploader.auth import _verify_token
+        from vk_uploader.vk_api import API_VERSION
 
         mock_resp = mocker.MagicMock()
         mock_resp.json.return_value = {"response": [{"id": 1}]}
-        mocker.patch("requests.post", return_value=mock_resp)
+        mock_post = mocker.patch("requests.post", return_value=mock_resp)
 
         assert _verify_token("good-token") is True
+        assert mock_post.call_args.kwargs["data"]["v"] == API_VERSION
 
     def test_error_code_5_returns_false(self, mocker):
         from vk_uploader.auth import _verify_token
@@ -230,5 +232,5 @@ class TestVerifyToken:
         mock_resp.json.side_effect = ValueError("bad json")
         mocker.patch("requests.post", return_value=mock_resp)
 
-        with pytest.raises(AuthError, match="invalid API response"):
+        with pytest.raises(AuthError, match="Invalid JSON"):
             _verify_token("token")

@@ -20,6 +20,19 @@ _BOT_DETECTION_MARKERS = (
     "confirm you're not a bot",
     "This helps protect our community",
 )
+_VIDEO_CACHE_SUFFIXES = (
+    ".mp4",
+    ".mkv",
+    ".webm",
+    ".mov",
+    ".avi",
+    ".flv",
+    ".m4v",
+    ".mpg",
+    ".mpeg",
+    ".3gp",
+    ".ogv",
+)
 
 
 def _extract_youtube_id(url: str) -> str | None:
@@ -98,6 +111,14 @@ def _build_env() -> dict[str, str]:
     return env
 
 
+def _cached_video_candidates(output_dir: Path, video_id: str) -> list[Path]:
+    """Return existing cached video files for a YouTube video id."""
+    return sorted(
+        p for p in output_dir.glob(f"{video_id}.*")
+        if p.suffix.lower() in _VIDEO_CACHE_SUFFIXES
+    )
+
+
 def _deno_path() -> str | None:
     """Return the path to deno if available."""
     for loc in [
@@ -164,8 +185,7 @@ class YtDlpDownloader:
 
         # 2. Check if the merged file already exists (skip re-download unless
         # subtitles were requested and are not present yet).
-        for ext in (".mp4", ".mkv", ".webm"):
-            candidate = self._output_dir / f"{video_id}{ext}"
+        for candidate in _cached_video_candidates(self._output_dir, video_id):
             if candidate.exists() and candidate.stat().st_size > 0:
                 srt_files = list(candidate.parent.glob(f"{candidate.stem}*.srt"))
                 if self._subtitles_lang and not srt_files:

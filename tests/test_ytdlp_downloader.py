@@ -202,6 +202,27 @@ class TestYtDlpDownloader:
         assert result.file_path == cached
         mock_popen.assert_called_once()
 
+    def test_cached_video_with_non_default_extension_is_reused(
+        self, mocker, tmp_path: Path
+    ):
+        info = {
+            "id": "abc123def45",
+            "title": "V",
+            "description": "",
+            "duration": 0,
+            "uploader": "",
+        }
+        mocker.patch.object(YtDlpDownloader, "_extract_info", return_value=info)
+        cached = tmp_path / "abc123def45.mov"
+        cached.write_text("fake")
+        mock_popen = mocker.patch("subprocess.Popen")
+
+        downloader = YtDlpDownloader(output_dir=tmp_path)
+        result = downloader.download("https://youtube.com/watch?v=abc123def45")
+
+        assert result.file_path == cached
+        mock_popen.assert_not_called()
+
     def test_download_bot_detection_raises_specific_error(self, mocker, tmp_path: Path):
         info = {
             "id": "abc123def45",

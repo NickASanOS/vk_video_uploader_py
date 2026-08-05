@@ -552,6 +552,15 @@ class TestParseLinksFile:
         with pytest.raises(UsageError, match="cannot read links file"):
             parse_links_file("/nonexistent/path.txt")
 
+    def test_non_utf8_file_raises_usage_error(self, tmp_path):
+        from vk_uploader.cli import parse_links_file
+
+        f = tmp_path / "links.txt"
+        f.write_bytes(b"\xff\xfe\x00")
+
+        with pytest.raises(UsageError, match="cannot read links file as UTF-8"):
+            parse_links_file(str(f))
+
 
 class TestCopyConfig:
     """Tests for _copy_config — config isolation."""

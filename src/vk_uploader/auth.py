@@ -10,6 +10,7 @@ from rich.console import Console
 
 from vk_uploader.config import ConfigFile
 from vk_uploader.models import AppConfig, AuthError
+from vk_uploader.vk_api import API_VERSION, VkApiError, VkClient
 
 
 class AuthResult(NamedTuple):
@@ -36,7 +37,7 @@ def run_oauth_flow(app_id: str) -> AuthResult:
         "display=page&"
         "scope=video,wall&"
         "response_type=token&"
-        "v=5.199"
+        f"v={API_VERSION}"
     )
 
     webbrowser.open(auth_url)
@@ -166,26 +167,14 @@ def ensure_token(
 
 def _verify_token(token: str) -> bool:
     """Check whether a VK access token is still valid via users.get."""
-    import requests
-
     try:
-        resp = requests.post(
-            "https://api.vk.com/method/users.get",
-            data={"access_token": token, "v": "5.199"},
-            timeout=10,
-        )
-        data: dict[str, object] = resp.json()
-        if "error" in data:
-            raw_error = data["error"]
-            err = raw_error if isinstance(raw_error, dict) else {}
-            code = err.get("error_code", -1)
-            # 5 = user authorization failed (bad token)
-            try:
-                return int(str(code)) != 5
-            except (TypeError, ValueError):
-                return True
-        return "response" in data
-    except requests.RequestException as e:
-        raise AuthError(f"Failed to verify VK token: network error: {e}") from e
-    except ValueError as e:
-        raise AuthError(f"Failed to verify VK token: invalid API response: {e}") from e
+        VkClient(token).users_get()
+        return True
+    except VkApiError as e:
+        # 5 = user authorization failed (bad token); other VK API errors do
+        # not prove that the token itself is invalid.
+        if e.code == 5:
+            return False
+        if e.code == -1:
+            raise AuthError(f"Failed to verify VK token: {e.message}") from e
+        return True

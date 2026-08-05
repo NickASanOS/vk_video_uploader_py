@@ -34,11 +34,19 @@ All notable changes to vk_uploader.
   YouTube maxres URL.
 - yt-dlp environment setup now keeps common tool paths available when `PATH` is
   empty or missing.
+- VK token verification now uses the shared VK API client/version instead of a
+  separate hard-coded `users.get` request.
+- Batch link files with invalid UTF-8 now fail with a clear usage error instead
+  of a traceback.
+- Thumbnail download retries no longer hide unexpected programming errors.
+- Cached yt-dlp downloads are now detected across common video file extensions.
 
 ### Changed
 - Subtitle download now requests the target language plus English fallback
   variants, allowing the pipeline to translate fallback subtitles to the target
   language when needed.
+- Metadata translation failures now print a non-fatal warning while keeping the
+  original title/description fallback.
 
 ## [0.0.7] — 2026-05-22
 

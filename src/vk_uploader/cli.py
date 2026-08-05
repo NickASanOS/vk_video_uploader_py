@@ -525,6 +525,8 @@ def parse_links_file(path: str) -> list[tuple[int, str, dict[str, str]]]:
                     continue
                 url, overrides = _parse_line_args(line, path, line_num)
                 jobs.append((line_num, url, overrides))
+    except UnicodeDecodeError as e:
+        raise UsageError(f"{path}: cannot read links file as UTF-8: {e}") from e
     except OSError as e:
         raise UsageError(f"{path}: cannot read links file: {e.strerror}") from e
     if not jobs:

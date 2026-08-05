@@ -41,3 +41,17 @@ def test_translate_failure_returns_original(mocker):
 
     result = translate_text("Hello world", "ru")
     assert result == "Hello world"
+
+
+def test_translate_failure_calls_error_callback(mocker):
+    error = RuntimeError("Network error")
+    mocker.patch(
+        "deep_translator.GoogleTranslator.translate",
+        side_effect=error,
+    )
+    on_error = mocker.MagicMock()
+
+    result = translate_text("Hello world", "ru", on_error=on_error)
+
+    assert result == "Hello world"
+    on_error.assert_called_once_with(error)
