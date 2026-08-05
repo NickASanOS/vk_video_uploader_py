@@ -712,16 +712,31 @@ def _batch_main(
         )
 
         # ── Run pipeline with bot-detection retry ──
+        job_failed_reason: str | None = None
         while True:
             try:
                 run_pipeline(console, ctx, job_config)
                 break
-            except BotDetectionError:
+            except BotDetectionError as e:
                 if job_config.defaults.cookies_from_browser:
-                    raise
+                    job_failed_reason = (
+                        "YouTube bot detection persisted with "
+                        f"cookies_from_browser={job_config.defaults.cookies_from_browser}"
+                    )
+                    ctx.stage = PipelineStage.ERROR
+                    ctx.error_message = job_failed_reason
+                    console.print(f"[red]  {job_failed_reason}[/red]")
+                    console.print(f"[dim]{e}[/dim]")
+                    break
                 browser = _prompt_browser(console)
                 if browser is None:
-                    raise
+                    job_failed_reason = (
+                        "YouTube bot detection — browser cookies required"
+                    )
+                    ctx.stage = PipelineStage.ERROR
+                    ctx.error_message = job_failed_reason
+                    console.print(f"[red]  {job_failed_reason}[/red]")
+                    break
                 job_config.defaults.cookies_from_browser = browser
                 config.defaults.cookies_from_browser = browser
                 config_file.save(config)
@@ -731,7 +746,9 @@ def _batch_main(
                 )
                 continue
 
-        if ctx.stage == PipelineStage.ERROR:
+        if job_failed_reason is not None:
+            failed.append((line_num, url, job_failed_reason))
+        elif ctx.stage == PipelineStage.ERROR:
             failed.append(
                 (line_num, url, ctx.error_message or "unknown error")
             )

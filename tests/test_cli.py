@@ -945,6 +945,61 @@ class TestBatchMain:
         saved_config = mock_cf.save.call_args.args[0]
         assert saved_config.defaults.cookies_from_browser == "firefox"
 
+    def test_batch_continues_after_unretryable_bot_detection(
+        self, mocker, tmp_path
+    ):
+        """A bot-detection failure in one job should not abort the whole batch."""
+        from vk_uploader.models import (
+            AppConfig,
+            BotDetectionError,
+            DefaultsConfig,
+            DownloadConfig,
+            PipelineStage,
+            VkConfig,
+        )
+
+        f = tmp_path / "links.txt"
+        f.write_text(
+            "https://youtube.com/watch?v=one\n"
+            "https://youtube.com/watch?v=two\n"
+        )
+
+        config = AppConfig(
+            vk=VkConfig(access_token="tok", group_id="456", app_id="123"),
+            defaults=DefaultsConfig(cookies_from_browser="firefox"),
+            download=DownloadConfig(),
+        )
+
+        console = mocker.MagicMock()
+        mock_cf = mocker.MagicMock()
+        mock_cf.load.return_value = config
+        mock_cf.resolve_output_dir.return_value = tmp_path
+        mocker.patch("vk_uploader.cli.ConfigFile", return_value=mock_cf)
+        mocker.patch("vk_uploader.auth.ensure_token")
+        prompt = mocker.patch("vk_uploader.cli._prompt_browser")
+
+        seen_urls = []
+
+        def _fake_pipeline(console, ctx, cfg):
+            seen_urls.append(ctx.youtube_url)
+            if len(seen_urls) == 1:
+                raise BotDetectionError("bot detection")
+            ctx.stage = PipelineStage.COMPLETED
+
+        mocker.patch("vk_uploader.cli.run_pipeline", side_effect=_fake_pipeline)
+
+        from vk_uploader.cli import _batch_main
+
+        with pytest.raises(SystemExit) as exc:
+            _batch_main(console, str(f), {})
+
+        assert exc.value.code == 1
+        assert seen_urls == [
+            "https://youtube.com/watch?v=one",
+            "https://youtube.com/watch?v=two",
+        ]
+        prompt.assert_not_called()
+
     def test_batch_main_with_failures(self, mocker, tmp_path):
         """_batch_main continues on failure, prints failed jobs, exits 1."""
         from vk_uploader.models import (
