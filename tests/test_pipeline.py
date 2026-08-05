@@ -31,7 +31,7 @@ def test_matching_srt_files_excludes_similar_prefixes(tmp_path: Path):
     own_lang.write_text("lang")
     other.write_text("other")
 
-    assert _matching_srt_files(video) == [own_lang, own_plain]
+    assert set(_matching_srt_files(video)) == {own_lang, own_plain}
 
 
 def test_cleanup_removes_only_matching_sidecars(mocker, tmp_path: Path):

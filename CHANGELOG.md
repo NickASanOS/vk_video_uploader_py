@@ -47,6 +47,9 @@ All notable changes to vk_uploader.
   language when needed.
 - Metadata translation failures now print a non-fatal warning while keeping the
   original title/description fallback.
+- CLI usage output now goes through the shared Rich console.
+- SRT sidecar matching now leaves ordering to the caller, avoiding redundant
+  sorting before subtitle scoring.
 
 ## [0.0.7] — 2026-05-22
 
