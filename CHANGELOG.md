@@ -4,11 +4,19 @@ All notable changes to vk_uploader.
 
 ## Unreleased
 
+### Added
+- Batch uploads via `links_file=<path>`, with one video job per line and
+  command-level plus line-level overrides.
+- `cleanup_after_upload=true|false` to remove local video and subtitle files
+  after a successful upload.
+
 ### Fixed
 - `token=` now works as a one-run CLI override without triggering OAuth or saving
   the token to config.
 - `group_id=` CLI overrides now satisfy upload validation without prompting during
   token checks.
+- Batch mode now honors command-level `token=` and `group_id=` overrides before
+  auth prompts.
 - YouTube bot detection during the download subprocess now triggers the same
   browser-cookie retry path as metadata extraction.
 - Cached video files no longer block subtitle download when subtitles are newly

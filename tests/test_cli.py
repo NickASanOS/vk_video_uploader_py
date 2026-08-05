@@ -706,6 +706,100 @@ class TestBatchMain:
         assert len(summary_calls) >= 1
         assert "2" in summary_calls[0]
 
+    def test_batch_token_and_group_overrides_skip_auth_prompts(self, mocker, tmp_path):
+        """Batch command-level auth overrides behave like single-run overrides."""
+        from vk_uploader.models import (
+            AppConfig,
+            DefaultsConfig,
+            DownloadConfig,
+            PipelineStage,
+            VkConfig,
+        )
+
+        f = tmp_path / "links.txt"
+        f.write_text("https://youtube.com/watch?v=abc\n")
+
+        config = AppConfig(
+            vk=VkConfig(access_token="", group_id="", app_id="123"),
+            defaults=DefaultsConfig(),
+            download=DownloadConfig(),
+        )
+
+        console = mocker.MagicMock()
+        mock_cf = mocker.MagicMock()
+        mock_cf.load.return_value = config
+        mock_cf.resolve_output_dir.return_value = tmp_path
+        mocker.patch("vk_uploader.cli.ConfigFile", return_value=mock_cf)
+        mock_ensure = mocker.patch("vk_uploader.auth.ensure_token")
+
+        seen_configs = []
+
+        def _fake_pipeline(console, ctx, cfg):
+            seen_configs.append(cfg)
+            ctx.stage = PipelineStage.COMPLETED
+
+        mocker.patch("vk_uploader.cli.run_pipeline", side_effect=_fake_pipeline)
+
+        from vk_uploader.cli import _batch_main
+
+        _batch_main(
+            console,
+            str(f),
+            {"token": "cli-token", "group_id": "999"},
+        )
+
+        mock_ensure.assert_not_called()
+        assert seen_configs[0].vk.access_token == "cli-token"
+        assert seen_configs[0].vk.group_id == "999"
+
+    def test_batch_line_level_auth_overrides_skip_auth_prompts(self, mocker, tmp_path):
+        """Line-level auth overrides should not force setup when every job has them."""
+        from vk_uploader.models import (
+            AppConfig,
+            DefaultsConfig,
+            DownloadConfig,
+            PipelineStage,
+            VkConfig,
+        )
+
+        f = tmp_path / "links.txt"
+        f.write_text(
+            "https://youtube.com/watch?v=abc token=line-token-1 group_id=111\n"
+            "https://youtube.com/watch?v=def token=line-token-2 group_id=222\n"
+        )
+
+        config = AppConfig(
+            vk=VkConfig(access_token="", group_id="", app_id="123"),
+            defaults=DefaultsConfig(),
+            download=DownloadConfig(),
+        )
+
+        console = mocker.MagicMock()
+        mock_cf = mocker.MagicMock()
+        mock_cf.load.return_value = config
+        mock_cf.resolve_output_dir.return_value = tmp_path
+        mocker.patch("vk_uploader.cli.ConfigFile", return_value=mock_cf)
+        mock_ensure = mocker.patch("vk_uploader.auth.ensure_token")
+
+        seen_configs = []
+
+        def _fake_pipeline(console, ctx, cfg):
+            seen_configs.append(cfg)
+            ctx.stage = PipelineStage.COMPLETED
+
+        mocker.patch("vk_uploader.cli.run_pipeline", side_effect=_fake_pipeline)
+
+        from vk_uploader.cli import _batch_main
+
+        _batch_main(console, str(f), {})
+
+        mock_ensure.assert_not_called()
+        assert [cfg.vk.access_token for cfg in seen_configs] == [
+            "line-token-1",
+            "line-token-2",
+        ]
+        assert [cfg.vk.group_id for cfg in seen_configs] == ["111", "222"]
+
     def test_command_level_metadata_overrides_apply_to_batch_jobs(self, mocker, tmp_path):
         """Global title/description/album apply unless line overrides them."""
         from vk_uploader.models import (

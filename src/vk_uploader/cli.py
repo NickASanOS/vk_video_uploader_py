@@ -639,11 +639,24 @@ def _batch_main(
     config_file = ConfigFile()
     config = config_file.load()
 
-    # ── Auth (once for all jobs) ──
-    old_token = config.vk.access_token
-    ensure_token(console, config_file, config)
-    if config.vk.access_token != old_token:
-        config = config_file.load()
+    batch_supplies_token = "token" in global_overrides or all(
+        "token" in overrides for _, _, overrides in jobs
+    )
+    batch_supplies_group = "group_id" in global_overrides or all(
+        "group_id" in overrides for _, _, overrides in jobs
+    )
+
+    # ── Auth (once for all jobs; one-shot token= must not be persisted) ──
+    if not batch_supplies_token:
+        old_token = config.vk.access_token
+        ensure_token(
+            console,
+            config_file,
+            config,
+            require_group=not batch_supplies_group,
+        )
+        if config.vk.access_token != old_token:
+            config = config_file.load()
 
     # ── Apply command-level overrides to base config ──
     _apply_overrides(config, global_overrides)
