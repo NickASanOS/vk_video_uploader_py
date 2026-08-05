@@ -49,7 +49,8 @@ All notable changes to vk_uploader.
   original title/description fallback.
 - CLI usage output now goes through the shared Rich console.
 - SRT sidecar matching now leaves ordering to the caller, avoiding redundant
-  sorting before subtitle scoring.
+  sorting before subtitle scoring, and scans only matching sidecar filename
+  patterns.
 
 ## [0.0.7] — 2026-05-22
 

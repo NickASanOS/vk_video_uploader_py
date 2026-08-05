@@ -434,10 +434,13 @@ def _matching_srt_files(video_path: Path) -> list[Path]:
     ``abcd.srt``.
     """
     stem = video_path.stem
-    return [
-        p for p in video_path.parent.glob("*.srt")
-        if p.name == f"{stem}.srt" or p.name.startswith(f"{stem}.")
-    ]
+    plain = video_path.parent / f"{stem}.srt"
+    matches = [plain] if plain.is_file() else []
+    matches.extend(
+        p for p in video_path.parent.glob(f"{stem}.*.srt")
+        if p.is_file()
+    )
+    return matches
 
 
 def _srt_score(path: Path, lang: str) -> int:
