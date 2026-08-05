@@ -32,6 +32,8 @@ All notable changes to vk_uploader.
   directory.
 - Thumbnail fallback no longer starts with a non-existent language-suffixed
   YouTube maxres URL.
+- yt-dlp environment setup now keeps common tool paths available when `PATH` is
+  empty or missing.
 
 ### Changed
 - Subtitle download now requests the target language plus English fallback

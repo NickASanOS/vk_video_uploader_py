@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
 
 from vk_uploader.models import BotDetectionError
-from vk_uploader.ytdlp_downloader import YtDlpDownloader, _find_ytdlp
+from vk_uploader.ytdlp_downloader import YtDlpDownloader, _build_env, _find_ytdlp
 
 
 def test_find_ytdlp_finds_path_binary(mocker):
@@ -18,6 +19,40 @@ def test_find_ytdlp_finds_path_binary(mocker):
     path = _find_ytdlp()
 
     assert path == "/usr/bin/yt-dlp"
+
+
+def test_build_env_prepends_common_tool_paths(monkeypatch):
+    monkeypatch.setenv("PATH", "/usr/bin")
+
+    env = _build_env()
+
+    assert env["PATH"].split(os.pathsep) == [
+        os.path.expanduser("~/.deno/bin"),
+        os.path.expanduser("~/.local/bin"),
+        "/usr/bin",
+    ]
+
+
+def test_build_env_keeps_common_tool_paths_when_path_empty(monkeypatch):
+    monkeypatch.setenv("PATH", "")
+
+    env = _build_env()
+
+    assert env["PATH"].split(os.pathsep) == [
+        os.path.expanduser("~/.deno/bin"),
+        os.path.expanduser("~/.local/bin"),
+    ]
+
+
+def test_build_env_keeps_common_tool_paths_when_path_missing(monkeypatch):
+    monkeypatch.delenv("PATH", raising=False)
+
+    env = _build_env()
+
+    assert env["PATH"].split(os.pathsep) == [
+        os.path.expanduser("~/.deno/bin"),
+        os.path.expanduser("~/.local/bin"),
+    ]
 
 
 class TestYtDlpDownloader:

@@ -91,7 +91,10 @@ def _build_env() -> dict[str, str]:
         os.path.expanduser("~/.local/bin"),
     ]
     existing = env.get("PATH", "")
-    env["PATH"] = ":".join(extra_paths) + ":" + existing if existing else ""
+    path_parts = [*extra_paths]
+    if existing:
+        path_parts.append(existing)
+    env["PATH"] = os.pathsep.join(path_parts)
     return env
 
 
