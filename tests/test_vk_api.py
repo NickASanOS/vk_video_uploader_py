@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 import requests
@@ -11,7 +12,7 @@ import requests
 from vk_uploader.vk_api import VkApiError, VkClient
 
 
-def make_json_response(json_data: dict, status_code: int = 200) -> requests.Response:
+def make_json_response(json_data: Any, status_code: int = 200) -> requests.Response:
     resp = requests.Response()
     resp.status_code = status_code
     resp._content = __import__("json").dumps(json_data).encode()
@@ -60,6 +61,52 @@ class TestCallMethod:
         assert call_data["access_token"] == "my-token"
         assert call_data["v"] == "5.100"
         assert call_data["extra"] == "val"
+
+    def test_raises_vk_api_error_on_non_object_json(self, mocker):
+        mocker.patch(
+            "vk_uploader.vk_api.requests.post",
+            return_value=make_json_response([]),
+        )
+        client = VkClient("tok")
+
+        with pytest.raises(VkApiError, match="expected object"):
+            client.call_method("users.get", {})
+
+    def test_raises_vk_api_error_when_response_missing(self, mocker):
+        mocker.patch(
+            "vk_uploader.vk_api.requests.post",
+            return_value=make_json_response({"ok": 1}),
+        )
+        client = VkClient("tok")
+
+        with pytest.raises(VkApiError, match="missing response"):
+            client.call_method("users.get", {})
+
+    def test_handles_non_dict_error_response(self, mocker):
+        mocker.patch(
+            "vk_uploader.vk_api.requests.post",
+            return_value=make_json_response({"error": "broken"}),
+        )
+        client = VkClient("tok")
+
+        with pytest.raises(VkApiError) as exc:
+            client.call_method("users.get", {})
+        assert exc.value.code == -1
+        assert exc.value.message == "broken"
+
+    def test_handles_malformed_error_code(self, mocker):
+        mocker.patch(
+            "vk_uploader.vk_api.requests.post",
+            return_value=make_json_response({
+                "error": {"error_code": "bad", "error_msg": "broken"},
+            }),
+        )
+        client = VkClient("tok")
+
+        with pytest.raises(VkApiError) as exc:
+            client.call_method("users.get", {})
+        assert exc.value.code == -1
+        assert exc.value.message == "broken"
 
 
 class TestUsersGet:

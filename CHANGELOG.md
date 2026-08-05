@@ -49,6 +49,8 @@ All notable changes to vk_uploader.
   are treated as empty.
 - Missing `download.video_format` in config now uses the same default as the
   application model.
+- Malformed VK API method responses now raise `VkApiError` instead of raw
+  `KeyError`, `AttributeError`, or `ValueError`.
 
 ### Changed
 - Subtitle download now requests the target language plus English fallback

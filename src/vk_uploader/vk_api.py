@@ -34,6 +34,13 @@ def _mime_for(path: Path) -> str:
     return _MIME_MAP.get(path.suffix.lower(), "video/mp4")
 
 
+def _api_error_code(value: Any) -> int:
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return -1
+
+
 class VkApiError(Exception):
     """Raised when the VK API returns an error response."""
 
@@ -58,17 +65,31 @@ class VkClient:
         try:
             resp = requests.post(url, data=body, timeout=60)
             resp.raise_for_status()
-            data: dict[str, Any] = resp.json()
+            raw_data: Any = resp.json()
         except requests.RequestException as e:
             raise VkApiError(code=-1, message=f"Network error calling {method}: {e}") from e
         except ValueError as e:
             raise VkApiError(code=-1, message=f"Invalid JSON from {method}: {e}") from e
 
-        if "error" in data:
-            err = data["error"]
+        if not isinstance(raw_data, dict):
             raise VkApiError(
-                code=err.get("error_code", -1),
-                message=err.get("error_msg", str(err)),
+                code=-1,
+                message=f"Invalid response from {method}: expected object",
+            )
+
+        data: dict[str, Any] = raw_data
+        if "error" in data:
+            raw_error = data["error"]
+            err = raw_error if isinstance(raw_error, dict) else {}
+            raise VkApiError(
+                code=_api_error_code(err.get("error_code", -1)),
+                message=str(err.get("error_msg", raw_error)),
+            )
+
+        if "response" not in data:
+            raise VkApiError(
+                code=-1,
+                message=f"Invalid response from {method}: missing response",
             )
 
         response: Any = data["response"]
