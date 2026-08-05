@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 from pathlib import Path
 
 import pytest
@@ -12,12 +13,14 @@ from vk_uploader.models import (
     DownloadResult,
     JobContext,
     UploadResult,
+    VkSaveResponse,
 )
 from vk_uploader.pipeline import (
     _cleanup_downloaded_files,
     _matching_srt_files,
     _stage_thumbnail_upload,
     _stage_translate_metadata,
+    _stage_vk_save,
 )
 
 
@@ -122,3 +125,36 @@ def test_stage_thumbnail_upload_does_not_hide_programming_errors(mocker, tmp_pat
         _stage_thumbnail_upload(
             console, vk, ctx, result, upload_result, result.thumbnail_url
         )
+
+
+def test_stage_vk_save_passes_thumbnail_url(mocker, tmp_path: Path):
+    console = mocker.MagicMock()
+    vk = mocker.MagicMock()
+    vk.video_save.return_value = VkSaveResponse(
+        upload_url="https://upload.vk.com/video",
+        video_id=10,
+        owner_id=-20,
+    )
+    ctx = JobContext(
+        youtube_url="https://youtube.com/watch?v=abc123def45",
+        output_dir=tmp_path,
+        group_id="123",
+        publish_delay_hours=24,
+        thumbnail_enabled=True,
+        wallpost=False,
+    )
+    publish_at = datetime.datetime(2026, 8, 5, tzinfo=datetime.UTC)
+
+    result = _stage_vk_save(
+        console=console,
+        vk=vk,
+        ctx=ctx,
+        title="Title",
+        description="Description",
+        publish_at=publish_at,
+        thumb_url="https://i.ytimg.com/thumb.jpg",
+        album_id="42",
+    )
+
+    assert result == vk.video_save.return_value
+    assert vk.video_save.call_args.kwargs["thumb_url"] == "https://i.ytimg.com/thumb.jpg"

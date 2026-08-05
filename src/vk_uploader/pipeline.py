@@ -257,6 +257,7 @@ def _stage_vk_save(
             group_id=ctx.group_id,
             publish_at=publish_at,
             wallpost=ctx.wallpost,
+            thumb_url=thumb_url,
             album_id=album_id,
         )
     except VkApiError as e:
