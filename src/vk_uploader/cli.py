@@ -810,9 +810,10 @@ def _prompt_browser(console: Console) -> str | None:
     )
 
     if available:
+        default = available[0]
         console.print(f"\nDetected browsers: [bold]{', '.join(available)}[/bold]")
         console.print(
-            "[dim]Type a browser name (or press Enter for 'firefox'),"
+            f"[dim]Type a browser name (or press Enter for '{default}'),"
             " or 'skip' to abort:[/dim]"
         )
     else:

@@ -378,6 +378,17 @@ class TestPromptBrowser:
 
         assert _prompt_browser(mocker.MagicMock()) == "firefox"
 
+    def test_prompt_text_uses_detected_default(self, mocker):
+        from vk_uploader.cli import _prompt_browser
+
+        console = mocker.MagicMock()
+        mocker.patch("vk_uploader.cli._detect_browsers", return_value=["chrome"])
+        mocker.patch("vk_uploader.cli.input", return_value="")
+
+        assert _prompt_browser(console) == "chrome"
+        printed = "\n".join(str(call) for call in console.print.call_args_list)
+        assert "press Enter for 'chrome'" in printed
+
     def test_empty_choice_without_detected_browser_skips(self, mocker):
         from vk_uploader.cli import _prompt_browser
 
