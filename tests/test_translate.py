@@ -34,6 +34,7 @@ def test_translate_splits_long_text(mocker):
 
 
 def test_translate_failure_returns_original(mocker):
+    mocker.patch("vk_uploader.translate.time.sleep")
     mocker.patch(
         "deep_translator.GoogleTranslator.translate",
         side_effect=Exception("Network error"),
@@ -45,6 +46,7 @@ def test_translate_failure_returns_original(mocker):
 
 def test_translate_failure_calls_error_callback(mocker):
     error = RuntimeError("Network error")
+    mocker.patch("vk_uploader.translate.time.sleep")
     mocker.patch(
         "deep_translator.GoogleTranslator.translate",
         side_effect=error,
@@ -58,6 +60,7 @@ def test_translate_failure_calls_error_callback(mocker):
 
 
 def test_provider_error_body_returns_original_and_calls_callback(mocker):
+    mocker.patch("vk_uploader.translate.time.sleep")
     provider_error = (
         "Error 500 (Server Error)!!1500.That’s an error."
         "There was an error. Please try again later.That’s all we know."
@@ -73,3 +76,21 @@ def test_provider_error_body_returns_original_and_calls_callback(mocker):
     assert result == "Hello world"
     on_error.assert_called_once()
     assert "Translation provider returned an error" in str(on_error.call_args.args[0])
+
+
+def test_provider_error_body_is_retried(mocker):
+    provider_error = (
+        "Error 500 (Server Error)!!1500.That’s an error."
+        "There was an error. Please try again later.That’s all we know."
+    )
+    sleep = mocker.patch("vk_uploader.translate.time.sleep")
+    translate = mocker.patch(
+        "deep_translator.GoogleTranslator.translate",
+        side_effect=[provider_error, "Привет, мир"],
+    )
+
+    result = translate_text("Hello world", "ru")
+
+    assert result == "Привет, мир"
+    assert translate.call_count == 2
+    sleep.assert_called_once_with(1.0)
