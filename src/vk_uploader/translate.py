@@ -4,6 +4,18 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+_PROVIDER_ERROR_MARKERS = (
+    "error 500 (server error)",
+    "that's an error",
+    "there was an error. please try again later",
+    "that's all we know",
+)
+
+
+def _looks_like_provider_error(text: str) -> bool:
+    normalized = text.lower().replace("\u2019", "'")
+    return any(marker in normalized for marker in _PROVIDER_ERROR_MARKERS)
+
 
 def translate_text(
     text: str,
@@ -25,12 +37,22 @@ def translate_text(
         translator = GoogleTranslator(source="auto", target=target_lang)
         # deep-translator has a 5000-character limit per call; split if needed.
         if len(text) <= 4900:
-            return str(translator.translate(text))
+            translated = str(translator.translate(text))
+            if _looks_like_provider_error(translated):
+                raise RuntimeError(f"Translation provider returned an error: {translated}")
+            return translated
 
         # Split long text by sentences to stay under the limit.
         chunks = _split_text(text, 4900)
-        translated = [str(translator.translate(chunk)) for chunk in chunks]
-        return " ".join(translated)
+        translated_chunks: list[str] = []
+        for chunk in chunks:
+            translated_chunk = str(translator.translate(chunk))
+            if _looks_like_provider_error(translated_chunk):
+                raise RuntimeError(
+                    f"Translation provider returned an error: {translated_chunk}"
+                )
+            translated_chunks.append(translated_chunk)
+        return " ".join(translated_chunks)
     except Exception as e:
         if on_error is not None:
             on_error(e)

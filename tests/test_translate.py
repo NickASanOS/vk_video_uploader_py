@@ -55,3 +55,21 @@ def test_translate_failure_calls_error_callback(mocker):
 
     assert result == "Hello world"
     on_error.assert_called_once_with(error)
+
+
+def test_provider_error_body_returns_original_and_calls_callback(mocker):
+    provider_error = (
+        "Error 500 (Server Error)!!1500.That’s an error."
+        "There was an error. Please try again later.That’s all we know."
+    )
+    mocker.patch(
+        "deep_translator.GoogleTranslator.translate",
+        return_value=provider_error,
+    )
+    on_error = mocker.MagicMock()
+
+    result = translate_text("Hello world", "ru", on_error=on_error)
+
+    assert result == "Hello world"
+    on_error.assert_called_once()
+    assert "Translation provider returned an error" in str(on_error.call_args.args[0])
