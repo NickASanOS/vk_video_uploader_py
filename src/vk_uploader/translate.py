@@ -14,6 +14,21 @@ _PROVIDER_ERROR_MARKERS = (
     "there was an error. please try again later",
     "that's all we know",
 )
+_MYMEMORY_TARGET_LOCALES = {
+    "ar": "ar-SA",
+    "de": "de-DE",
+    "en": "en-US",
+    "es": "es-ES",
+    "fr": "fr-FR",
+    "it": "it-IT",
+    "ja": "ja-JP",
+    "ko": "ko-KR",
+    "pt": "pt-PT",
+    "ru": "ru-RU",
+    "tr": "tr-TR",
+    "uk": "uk-UA",
+    "zh": "zh-CN",
+}
 
 
 def _looks_like_provider_error(text: str) -> bool:
@@ -43,6 +58,44 @@ def _translate_chunk_with_retries(translator: Any, text: str) -> str:
     raise RuntimeError("Translation failed without an error")
 
 
+def _mymemory_target_locale(target_lang: str) -> str:
+    lang = target_lang.strip()
+    if not lang:
+        return lang
+    if "-" in lang:
+        return lang
+    return _MYMEMORY_TARGET_LOCALES.get(lang.lower(), lang)
+
+
+def _translate_with_google(text: str, target_lang: str) -> str:
+    from deep_translator import GoogleTranslator  # type: ignore[import-untyped]
+
+    translator = GoogleTranslator(source="auto", target=target_lang)
+    return _translate_chunk_with_retries(translator, text)
+
+
+def _translate_with_mymemory(text: str, target_lang: str) -> str:
+    from deep_translator import MyMemoryTranslator
+
+    translator = MyMemoryTranslator(
+        source="en-US",
+        target=_mymemory_target_locale(target_lang),
+    )
+    return _translate_chunk_with_retries(translator, text)
+
+
+def _translate_chunk_with_fallbacks(text: str, target_lang: str) -> str:
+    errors: list[Exception] = []
+    for provider in (_translate_with_google, _translate_with_mymemory):
+        try:
+            return provider(text, target_lang)
+        except Exception as e:
+            errors.append(e)
+
+    messages = "; ".join(str(error) for error in errors)
+    raise RuntimeError(f"All translation providers failed: {messages}")
+
+
 def translate_text(
     text: str,
     target_lang: str,
@@ -57,19 +110,16 @@ def translate_text(
     if not text or not text.strip():
         return text
 
-    from deep_translator import GoogleTranslator  # type: ignore[import-untyped]
-
     try:
-        translator = GoogleTranslator(source="auto", target=target_lang)
         # deep-translator has a 5000-character limit per call; split if needed.
         if len(text) <= 4900:
-            return _translate_chunk_with_retries(translator, text)
+            return _translate_chunk_with_fallbacks(text, target_lang)
 
         # Split long text by sentences to stay under the limit.
         chunks = _split_text(text, 4900)
         translated_chunks: list[str] = []
         for chunk in chunks:
-            translated_chunks.append(_translate_chunk_with_retries(translator, chunk))
+            translated_chunks.append(_translate_chunk_with_fallbacks(chunk, target_lang))
         return " ".join(translated_chunks)
     except Exception as e:
         if on_error is not None:

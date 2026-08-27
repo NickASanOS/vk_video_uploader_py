@@ -21,6 +21,29 @@ def test_translate_returns_string(mocker):
     assert isinstance(result, str)
 
 
+def test_google_failure_falls_back_to_mymemory(mocker):
+    provider_error = (
+        "Error 500 (Server Error)!!1500.That’s an error."
+        "There was an error. Please try again later.That’s all we know."
+    )
+    sleep = mocker.patch("vk_uploader.translate.time.sleep")
+    google_translate = mocker.patch(
+        "deep_translator.GoogleTranslator.translate",
+        return_value=provider_error,
+    )
+    mymemory_translate = mocker.patch(
+        "deep_translator.MyMemoryTranslator.translate",
+        return_value="Привет, мир",
+    )
+
+    result = translate_text("Hello world", "ru")
+
+    assert result == "Привет, мир"
+    assert google_translate.call_count == 3
+    mymemory_translate.assert_called_once()
+    assert sleep.call_count == 2
+
+
 def test_translate_splits_long_text(mocker):
     mocker.patch(
         "deep_translator.GoogleTranslator.translate",
@@ -39,6 +62,10 @@ def test_translate_failure_returns_original(mocker):
         "deep_translator.GoogleTranslator.translate",
         side_effect=Exception("Network error"),
     )
+    mocker.patch(
+        "deep_translator.MyMemoryTranslator.translate",
+        side_effect=Exception("Fallback network error"),
+    )
 
     result = translate_text("Hello world", "ru")
     assert result == "Hello world"
@@ -51,15 +78,20 @@ def test_translate_failure_calls_error_callback(mocker):
         "deep_translator.GoogleTranslator.translate",
         side_effect=error,
     )
+    mocker.patch(
+        "deep_translator.MyMemoryTranslator.translate",
+        side_effect=RuntimeError("Fallback error"),
+    )
     on_error = mocker.MagicMock()
 
     result = translate_text("Hello world", "ru", on_error=on_error)
 
     assert result == "Hello world"
-    on_error.assert_called_once_with(error)
+    on_error.assert_called_once()
+    assert "All translation providers failed" in str(on_error.call_args.args[0])
 
 
-def test_provider_error_body_returns_original_and_calls_callback(mocker):
+def test_provider_error_body_returns_original_when_fallback_fails(mocker):
     mocker.patch("vk_uploader.translate.time.sleep")
     provider_error = (
         "Error 500 (Server Error)!!1500.That’s an error."
@@ -68,6 +100,10 @@ def test_provider_error_body_returns_original_and_calls_callback(mocker):
     mocker.patch(
         "deep_translator.GoogleTranslator.translate",
         return_value=provider_error,
+    )
+    mocker.patch(
+        "deep_translator.MyMemoryTranslator.translate",
+        side_effect=RuntimeError("Fallback error"),
     )
     on_error = mocker.MagicMock()
 
@@ -88,9 +124,11 @@ def test_provider_error_body_is_retried(mocker):
         "deep_translator.GoogleTranslator.translate",
         side_effect=[provider_error, "Привет, мир"],
     )
+    mymemory_translate = mocker.patch("deep_translator.MyMemoryTranslator.translate")
 
     result = translate_text("Hello world", "ru")
 
     assert result == "Привет, мир"
     assert translate.call_count == 2
+    mymemory_translate.assert_not_called()
     sleep.assert_called_once_with(1.0)
