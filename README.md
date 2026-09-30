@@ -117,6 +117,17 @@ language first and English as a fallback; if the best available subtitle is not 
 the target language, it is translated locally to `lang=<code>`.
 Subtitles are **not uploaded to VK** (VK API does not support SRT subtitle upload).
 
+## Translation
+
+Title and description translation uses Google Translate via `deep-translator`
+(no API key required). If Google fails — for example due to rate limiting — the
+tool falls back to MyMemory.
+
+Long text is split into provider-sized chunks (Google 4900 characters, MyMemory
+499, its API limit) and translated piece by piece, so full-length descriptions
+are preserved. If every provider fails, the original text is kept and a
+non-fatal warning is printed instead of aborting the upload.
+
 ## Batch uploads
 
 Upload multiple videos from a text file using `links_file=<path>`:
