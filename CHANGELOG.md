@@ -51,6 +51,11 @@ All notable changes to vk_uploader.
   application model.
 - Malformed VK API method responses now raise `VkApiError` instead of raw
   `KeyError`, `AttributeError`, or `ValueError`.
+- MyMemory fallback now splits long text into chunks of at most 499 characters,
+  respecting deep-translator's exclusive 500-character limit, including for
+  descriptions of exactly 500 characters and long sentences without punctuation.
+- Rate-limit (429) translation errors now back off longer between retries.
+- Translation error messages no longer echo the full source text.
 
 ### Changed
 - Subtitle download now requests the target language plus English fallback
