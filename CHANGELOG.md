@@ -38,6 +38,10 @@ All notable changes to vk_uploader.
   separate hard-coded `users.get` request.
 - Batch link files with invalid UTF-8 now fail with a clear usage error instead
   of a traceback.
+- Subtitle selection no longer requests YouTube's machine-translated variants
+  (e.g. `ru-ar`), which hit YouTube's rate-limited translate endpoint and aborted
+  the whole download with HTTP 429; translation to the target language is done
+  locally instead.
 - Thumbnail download retries no longer hide unexpected programming errors.
 - Cached yt-dlp downloads are now detected across common video file extensions.
 - Cached video subtitle checks no longer treat similarly prefixed SRT files as

@@ -115,6 +115,9 @@ If `translation=true` or `subtitles=true` is set, `lang=<code>` must also be pro
 Subtitles are downloaded as `.srt` files. The downloader asks yt-dlp for the target
 language first and English as a fallback; if the best available subtitle is not in
 the target language, it is translated locally to `lang=<code>`.
+YouTube's machine-translated subtitle variants (e.g. `ru-ar`) are deliberately not
+requested — they hit YouTube's rate-limited translate endpoint and fail with
+HTTP 429 — so translation to the target language is always done locally instead.
 Subtitles are **not uploaded to VK** (VK API does not support SRT subtitle upload).
 
 ## Translation

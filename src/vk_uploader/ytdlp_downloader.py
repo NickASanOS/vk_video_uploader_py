@@ -177,13 +177,20 @@ def _looks_like_bot_detection(output: str) -> bool:
 
 
 def _subtitle_langs_arg(target_lang: str) -> str:
-    """Build a yt-dlp subtitle language selector with an English fallback."""
+    """Build a yt-dlp subtitle language selector with an English fallback.
+
+    Uses exact language codes only (no ``.*`` wildcard). The wildcard matches
+    auto-translated variants (``ru-ar``, ``ru-en``, ...) that hit YouTube's
+    rate-limited translate endpoint and fail with HTTP 429, aborting the whole
+    download. Auto-translated subtitles are produced locally instead: the
+    pipeline translates the best available subtitle to the target language.
+    """
     lang = target_lang.strip()
     if not lang:
         return ""
-    targets = [lang, f"{lang}.*"]
+    targets = [lang]
     if not lang.lower().startswith("en"):
-        targets.extend(["en", "en.*"])
+        targets.append("en")
     return ",".join(targets)
 
 
